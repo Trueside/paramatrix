@@ -73,6 +73,50 @@ namespace Paramatrix.Content
 
             CheckConditionCycles(unique, diagnostics);
 
+            // Scenario layer: dialogues, responses, events.
+            unique.TryGetValue(EntityId.Parse(GameSettingsDefinition.SettingsId), out var settingsDraft);
+            var settings = settingsDraft as GameSettingsDraft;
+            var scenario = new ScenarioResolver(unique, stateTable, resolver, settings?.PlayerCharacter ?? default, diagnostics);
+            var scenarioDefinitions = new Dictionary<EntityId, Definition>();
+            var responses = new List<ResponseDefinition>();
+            var allResponsesValid = true;
+            foreach (var draft in unique.Values)
+            {
+                Definition built = null;
+                if (draft is RawDraft raw && draft.Id.Kind == EntityKind.Dialogue)
+                {
+                    built = scenario.ResolveDialogue(raw);
+                }
+                else if (draft is RawDraft rawResponse && draft.Id.Kind == EntityKind.Response)
+                {
+                    var response = scenario.ResolveResponse(rawResponse);
+                    allResponsesValid &= response != null;
+                    if (response != null)
+                    {
+                        responses.Add(response);
+                    }
+
+                    built = response;
+                }
+                else if (draft is EventDraft eventDraft)
+                {
+                    built = scenario.ResolveEvent(eventDraft);
+                }
+
+                if (built != null)
+                {
+                    scenarioDefinitions.Add(built.Id, built);
+                }
+            }
+
+            // Set-level checks only over a fully valid set: a broken response would make them report noise.
+            if (allResponsesValid)
+            {
+                scenario.CheckResponseSet(responses, settings?.Source ?? new SourceLocation(firstSource ?? "<no content>", null, 0, 0));
+            }
+
+            scenario.CheckEventGraphs();
+
             var result = new List<Definition>();
             if (diagnostics.HasErrors)
             {
@@ -81,7 +125,9 @@ namespace Paramatrix.Content
 
             foreach (var draft in unique.Values)
             {
-                result.Add(Build(draft, statesByEntity, conditions));
+                result.Add(scenarioDefinitions.TryGetValue(draft.Id, out var definition)
+                    ? definition
+                    : Build(draft, statesByEntity, conditions));
             }
 
             return result;

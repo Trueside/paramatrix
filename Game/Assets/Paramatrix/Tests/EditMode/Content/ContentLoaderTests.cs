@@ -153,8 +153,13 @@ namespace Paramatrix.Tests.Content
         public void DuplicateIdAcrossFiles() => AssertErrors(Load(Office), DiagnosticCode.DuplicateId);
 
         [Test]
-        public void KindsNotImplementedYetAreRejected() =>
-            AssertErrors(Load("{ 'id': 'event.intro' }"), DiagnosticCode.UnsupportedDefinitionKind);
+        public void EventHeaderFieldsRequired() =>
+            AssertErrors(
+                Load("{ 'id': 'event.intro' }"),
+                DiagnosticCode.MissingRequiredField,
+                DiagnosticCode.MissingRequiredField,
+                DiagnosticCode.MissingRequiredField,
+                DiagnosticCode.MissingRequiredField);
 
         [Test]
         public void ErrorsAccumulateAcrossFiles()

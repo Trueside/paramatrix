@@ -90,33 +90,12 @@ namespace Paramatrix.Content
 
         private ConditionNode ResolveAtomic(AtomicConditionDraft draft)
         {
-            if (!_drafts.TryGetValue(draft.Target, out var target))
+            if (!TryResolveState(draft.Target, draft.TargetSource, draft.Property, draft.PropertySource, out var state))
             {
-                _diagnostics.Error(DiagnosticCode.UnknownReference, draft.TargetSource, $"Condition target '{draft.Target}' is not defined.");
                 return null;
             }
 
-            if (!EntityKinds.CanOwnState(target.Id.Kind))
-            {
-                _diagnostics.Error(
-                    DiagnosticCode.InvalidReferenceKind,
-                    draft.TargetSource,
-                    $"Condition target '{draft.Target}' has no State: only character, item, object, location and story entities do.");
-                return null;
-            }
-
-            var address = new StateAddress(draft.Target, draft.Property);
-            if (!_states.TryGetValue(address, out var state))
-            {
-                // A declared or built-in property missing from the table failed its own validation: already reported.
-                if (target is WorldDraft world && !world.DeclaredProperties.Contains(draft.Property) && !IsBuiltIn(world, draft.Property))
-                {
-                    _diagnostics.Error(DiagnosticCode.UnknownStateProperty, draft.PropertySource, $"{draft.Target} has no State property '{draft.Property}'.");
-                }
-
-                return null;
-            }
-
+            var address = state.Address;
             if (!ComparisonOperators.IsAllowedFor(draft.Operator, state.Type))
             {
                 _diagnostics.Error(
@@ -147,6 +126,42 @@ namespace Paramatrix.Content
             }
 
             return new AtomicCondition(address, draft.Operator, value, draft.Source);
+        }
+
+        /// <summary>
+        /// Resolves "entity + property" to its State definition, reporting a missing or stateless entity
+        /// and a missing property. A declared or built-in property that failed its own validation is not
+        /// reported again. Shared by conditions, triggers and actions.
+        /// </summary>
+        public bool TryResolveState(EntityId target, SourceLocation targetSource, string property, SourceLocation propertySource, out StateDefinition state)
+        {
+            state = null;
+            if (!_drafts.TryGetValue(target, out var draft))
+            {
+                _diagnostics.Error(DiagnosticCode.UnknownReference, targetSource, $"'{target}' is not defined.");
+                return false;
+            }
+
+            if (!EntityKinds.CanOwnState(target.Kind))
+            {
+                _diagnostics.Error(
+                    DiagnosticCode.InvalidReferenceKind,
+                    targetSource,
+                    $"'{target}' has no State: only character, item, object, location and story entities do.");
+                return false;
+            }
+
+            if (_states.TryGetValue(new StateAddress(target, property), out state))
+            {
+                return true;
+            }
+
+            if (draft is WorldDraft world && !world.DeclaredProperties.Contains(property) && !IsBuiltIn(world, property))
+            {
+                _diagnostics.Error(DiagnosticCode.UnknownStateProperty, propertySource, $"{target} has no State property '{property}'.");
+            }
+
+            return false;
         }
 
         private static bool IsBuiltIn(WorldDraft world, string property) =>

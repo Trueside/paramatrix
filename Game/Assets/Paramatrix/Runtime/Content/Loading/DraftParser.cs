@@ -37,6 +37,13 @@ namespace Paramatrix.Content
                 case EntityKind.Condition:
                     draft = ParseNamedCondition(reader, id);
                     break;
+                case EntityKind.Event:
+                    draft = ParseEventHeader(reader, id);
+                    break;
+                case EntityKind.Dialogue:
+                case EntityKind.Response:
+                    // Parsed entirely by the linker, which also reports their unknown fields.
+                    return new RawDraft(id, reader.Location, source, reader.Object);
                 default:
                     diagnostics.Error(
                         DiagnosticCode.UnsupportedDefinitionKind,
@@ -50,6 +57,47 @@ namespace Paramatrix.Content
                 reader.ReportUnknownFields();
             }
 
+            return draft;
+        }
+
+        private static Draft ParseEventHeader(JsonObjectReader reader, EntityId id)
+        {
+            var draft = new EventDraft(id, reader.Location, reader.Source);
+
+            if (reader.RequiredString("execution", out var execution))
+            {
+                switch (execution)
+                {
+                    case "exclusive": draft.ExecutionType = ExecutionType.Exclusive; break;
+                    case "background": draft.ExecutionType = ExecutionType.Background; break;
+                    default:
+                        reader.Diagnostics.Error(
+                            DiagnosticCode.InvalidExecutionType,
+                            reader.LocationOf(reader.Object["execution"]),
+                            $"Execution type '{execution}' is not supported; use exclusive or background.");
+                        break;
+                }
+            }
+
+            if (reader.RequiredString("repeat", out var repeat))
+            {
+                switch (repeat)
+                {
+                    case "once": draft.RepeatPolicy = RepeatPolicy.Once; break;
+                    case "repeatable": draft.RepeatPolicy = RepeatPolicy.Repeatable; break;
+                    case "once_per_location_visit": draft.RepeatPolicy = RepeatPolicy.OncePerLocationVisit; break;
+                    default:
+                        reader.Diagnostics.Error(
+                            DiagnosticCode.InvalidRepeatPolicy,
+                            reader.LocationOf(reader.Object["repeat"]),
+                            $"Repeat policy '{repeat}' is not supported; use once, repeatable or once_per_location_visit.");
+                        break;
+                }
+            }
+
+            draft.Triggers = reader.RequiredArray("triggers");
+            draft.LaunchCondition = reader.Optional("launch_condition");
+            draft.Actions = reader.RequiredArray("actions");
             return draft;
         }
 
