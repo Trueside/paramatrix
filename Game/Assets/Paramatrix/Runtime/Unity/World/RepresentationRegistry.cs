@@ -79,21 +79,10 @@ namespace Paramatrix.Unity
 
         private bool Register(EntityView view, Dictionary<EntityId, EntityView> into)
         {
-            if (!EntityId.TryParse(view.RawEntityId, out var id, out var error))
+            var problem = SceneStructure.ViewProblem(view, _content, out var id);
+            if (problem != null)
             {
-                Report(view, $"has an invalid entity ID: {error}");
-                return false;
-            }
-
-            if (!_content.Exists(id))
-            {
-                Report(view, $"represents '{id}', which is not defined in content");
-                return false;
-            }
-
-            if (id.Kind != view.Kind)
-            {
-                Report(view, $"is a {view.GetType().Name} but '{id}' is a {EntityKinds.Prefix(id.Kind)}");
+                Report(view, problem);
                 return false;
             }
 

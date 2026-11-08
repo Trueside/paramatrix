@@ -96,68 +96,34 @@ namespace Paramatrix.Unity
 
         private bool Prepare(Scene scene, string sceneName, string entry, out string error)
         {
-            LocationRoot root = null;
-            EntryPoint chosen = null;
-            var defaults = 0;
-            foreach (var gameObject in scene.GetRootGameObjects())
+            var structure = SceneStructure.Inspect(scene);
+            if (structure.Problems.Count > 0)
             {
-                foreach (var candidate in gameObject.GetComponentsInChildren<LocationRoot>(true))
-                {
-                    if (root != null)
-                    {
-                        error = $"scene '{sceneName}' has more than one LocationRoot";
-                        return false;
-                    }
-
-                    root = candidate;
-                }
-
-                foreach (var point in gameObject.GetComponentsInChildren<EntryPoint>(true))
-                {
-                    if (point.IsDefault)
-                    {
-                        defaults++;
-                    }
-
-                    if (entry == null ? point.IsDefault : point.EntryName == entry)
-                    {
-                        chosen = point;
-                    }
-                }
-            }
-
-            if (root == null)
-            {
-                error = $"scene '{sceneName}' has no LocationRoot";
+                error = $"scene '{sceneName}' " + string.Join("; ", structure.Problems);
                 return false;
             }
 
             var expected = FindLocationOf(sceneName);
-            if (!expected.IsValid || root.LocationId != expected.Value)
+            if (!expected.IsValid || structure.Root.LocationId != expected.Value)
             {
-                error = $"scene '{sceneName}' says it is '{root.LocationId}', content maps it to '{expected}'";
+                error = $"scene '{sceneName}' says it is '{structure.Root.LocationId}', content maps it to '{expected}'";
                 return false;
             }
 
-            if (defaults != 1)
-            {
-                error = $"scene '{sceneName}' must have exactly one default entry point, found {defaults}";
-                return false;
-            }
-
+            var chosen = structure.FindEntry(entry);
             if (chosen == null)
             {
                 error = $"scene '{sceneName}' has no entry point '{entry}'";
                 return false;
             }
 
-            if (!_representations.RegisterScene(scene, root, expected))
+            if (!_representations.RegisterScene(scene, structure.Root, expected))
             {
                 error = $"scene '{sceneName}' has invalid representations (see the errors above)";
                 return false;
             }
 
-            _hero.EnterScene(root, chosen.transform.position.x);
+            _hero.EnterScene(structure.Root, chosen.transform.position.x);
             error = null;
             return true;
         }

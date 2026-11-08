@@ -43,6 +43,14 @@ unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.DemoScene
 
 Новый JSON в `Game/Assets/Paramatrix/Content/` попадает в игру только после «Paramatrix → Collect Content» (или BuildAll). Тест `ProjectContentIsValid` проверяет весь реальный контент.
 
+Проверка проекта целиком (контент + сцены: манифест, `LocationRoot`, точки входа, ID представлений, клипы анимаций, где должны быть видны персонажи и предметы) — меню «Paramatrix → Validate Project» или пакетно (код выхода 1 при ошибках):
+
+```bash
+unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.ProjectValidator.ValidateBatch
+```
+
+Правила устройства сцены живут в одном месте — `SceneStructure` (им пользуются и загрузчик сцен в игре, и проверка в редакторе). Тесты редактора — `Game/Assets/Paramatrix/Tests/Editor` (только Unity, в `dotnet test` не входят).
+
 ## Unity-слой
 
 - В Unity 6 есть свой тип `UnityEngine.EntityId`: в файлах с `using UnityEngine;` нужен `using EntityId = Paramatrix.Content.EntityId;`.

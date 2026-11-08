@@ -404,25 +404,6 @@ namespace Paramatrix.Unity.Editor
             return AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath);
         }
 
-        private static void Set(Object target, string field, object value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(field);
-            if (property == null)
-            {
-                throw new System.InvalidOperationException($"{target.GetType().Name} has no serialized field '{field}'.");
-            }
-
-            switch (value)
-            {
-                case string text: property.stringValue = text; break;
-                case bool flag: property.boolValue = flag; break;
-                case float number: property.floatValue = number; break;
-                case Object reference: property.objectReferenceValue = reference; break;
-                default: throw new System.ArgumentException($"Unsupported value for '{field}'.");
-            }
-
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
+        private static void Set(Object target, string field, object value) => SerializedFields.Set(target, field, value);
     }
 }
