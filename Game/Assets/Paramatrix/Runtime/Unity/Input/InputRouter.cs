@@ -1,5 +1,6 @@
 using Paramatrix.Gameplay;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace Paramatrix.Unity
@@ -14,6 +15,10 @@ namespace Paramatrix.Unity
     {
         [SerializeField]
         private Camera worldCamera;
+
+        [SerializeField]
+        [Tooltip("Clicks over UI (inventory) never reach the world.")]
+        private EventSystem eventSystem;
 
         private InputAction _move;
         private InputAction _primary;
@@ -78,7 +83,7 @@ namespace Paramatrix.Unity
                 return;
             }
 
-            if (_primary.WasPressedThisFrame() || _secondary.WasPressedThisFrame())
+            if ((_primary.WasPressedThisFrame() || _secondary.WasPressedThisFrame()) && !IsPointerOverUi())
             {
                 var screen = pointer.position.ReadValue();
                 var world = worldCamera.ScreenToWorldPoint(new Vector3(screen.x, screen.y, -worldCamera.transform.position.z));
@@ -122,6 +127,8 @@ namespace Paramatrix.Unity
         }
 
         public void AdvanceDialogue() => _session?.Dialogue.Advance();
+
+        private bool IsPointerOverUi() => eventSystem != null && eventSystem.IsPointerOverGameObject();
 
         private EntityView ViewAt(Vector2 world)
         {

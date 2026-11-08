@@ -47,6 +47,9 @@ unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.DemoScene
 
 - В Unity 6 есть свой тип `UnityEngine.EntityId`: в файлах с `using UnityEngine;` нужен `using EntityId = Paramatrix.Content.EntityId;`.
 - NUnit в Unity — 3.5: сообщение в `Assert.That` только строкой, не массивом.
+- Ресурсы TextMesh Pro (`Game/Assets/TextMesh Pro`) лежат в репозитории. `AssetDatabase.ImportPackage` в пакетном режиме не успевает выполниться до выхода Unity; если ресурсы понадобится обновить — меню «Paramatrix → Import TMP Essentials» в открытом редакторе.
+- Шрифт текста — системный Segoe UI через динамический TMP-ассет (`UiFonts`): в проект шрифт не копируется. Финальный шрифт — решение по оформлению.
+- Мировые часы: VN-диалог ставит `Time.timeScale = 0` (`WorldPause`), всё мировое движение — на scaled time, UI и Scenario от времени не зависят.
 
 ## Правила кода
 

@@ -7,7 +7,9 @@
         "Paramatrix.Conditions",
         "Paramatrix.Scenario",
         "Paramatrix.Gameplay",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -3,7 +3,10 @@
     "rootNamespace": "Paramatrix.Unity.Editor",
     "references": [
         "Paramatrix.Content",
-        "Paramatrix.Unity"
+        "Paramatrix.Unity",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

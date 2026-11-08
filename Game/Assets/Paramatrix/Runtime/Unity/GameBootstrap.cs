@@ -24,7 +24,13 @@ namespace Paramatrix.Unity
         private InputRouter input;
 
         [SerializeField]
-        private PlaceholderDialogueView dialogueView;
+        private DialogueView dialogueView;
+
+        [SerializeField]
+        private InventoryView inventoryView;
+
+        [SerializeField]
+        private WorldPause worldPause;
 
         [SerializeField]
         private DiagnosticsOverlay overlay;
@@ -47,7 +53,13 @@ namespace Paramatrix.Unity
 
         public InputRouter Input => input;
 
-        public PlaceholderDialogueView DialogueView => dialogueView;
+        public DialogueView DialogueView => dialogueView;
+
+        public InventoryView InventoryView => inventoryView;
+
+        public WorldPause WorldPause => worldPause;
+
+        public TMPro.TMP_FontAsset Font { get; private set; }
 
         /// <summary>True once the game is running (new game or load finished).</summary>
         public bool IsReady { get; private set; }
@@ -68,6 +80,13 @@ namespace Paramatrix.Unity
             catch (InvalidOperationException exception)
             {
                 Fail(exception.Message);
+                return;
+            }
+
+            Font = UiFonts.CreateSystemFont(out var fontError);
+            if (Font == null)
+            {
+                Fail("UI font: " + fontError);
                 return;
             }
 
@@ -100,6 +119,9 @@ namespace Paramatrix.Unity
             hero.Bind(Representations);
             operations.Bind(Representations, Session.Scenario);
             input.Bind(Session, hero, Representations);
+            dialogueView.Bind(Representations, Diagnostics, Font);
+            inventoryView.Bind(Session, Font);
+            worldPause.Bind(Session.Flow);
 
             if (startNewGameOnPlay)
             {

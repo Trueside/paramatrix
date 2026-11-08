@@ -4,7 +4,10 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using TMPro;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
+using UnityEngine.UI;
 
 namespace Paramatrix.Unity.Editor
 {
@@ -47,9 +50,25 @@ namespace Paramatrix.Unity.Editor
             Debug.Log($"[Paramatrix] Content manifest: {paths.Count} file(s).");
         }
 
+        /// <summary>TextMesh Pro shaders and settings; run once before BuildAll in a fresh checkout.</summary>
+        [MenuItem("Paramatrix/Import TMP Essentials")]
+        public static void ImportTmpEssentials()
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/TextMesh Pro"))
+            {
+                TMP_PackageResourceImporter.ImportResources(true, false, false);
+                AssetDatabase.Refresh();
+            }
+        }
+
         [MenuItem("Paramatrix/Build Demo Scenes")]
         public static void BuildAll()
         {
+            if (!AssetDatabase.IsValidFolder("Assets/TextMesh Pro"))
+            {
+                throw new System.InvalidOperationException("TextMesh Pro essentials are missing: run Paramatrix > Import TMP Essentials first.");
+            }
+
             Directory.CreateDirectory(ScenesFolder);
             CollectContent();
             var sprite = EnsureSprite();
@@ -96,13 +115,24 @@ namespace Paramatrix.Unity.Editor
             var systems = new GameObject("Systems");
             var bootstrap = systems.AddComponent<GameBootstrap>();
             var input = systems.AddComponent<InputRouter>();
-            var dialogue = systems.AddComponent<PlaceholderDialogueView>();
             var overlay = systems.AddComponent<DiagnosticsOverlay>();
+            var pause = systems.AddComponent<WorldPause>();
             Set(input, "worldCamera", camera);
+
+            var eventSystem = new GameObject("EventSystem");
+            var events = eventSystem.AddComponent<EventSystem>();
+            eventSystem.AddComponent<InputSystemUIInputModule>();
+            Set(input, "eventSystem", events);
+
+            var canvas = BuildCanvas();
+            var dialogue = BuildDialogueUi(canvas, camera);
+            var inventory = BuildInventoryUi(canvas);
             Set(bootstrap, "manifest", AssetDatabase.LoadAssetAtPath<ContentManifest>(ManifestPath));
             Set(bootstrap, "hero", heroController);
             Set(bootstrap, "input", input);
             Set(bootstrap, "dialogueView", dialogue);
+            Set(bootstrap, "inventoryView", inventory);
+            Set(bootstrap, "worldPause", pause);
             Set(bootstrap, "overlay", overlay);
 
             EditorSceneManager.SaveScene(scene, BootstrapScene);
@@ -143,6 +173,134 @@ namespace Paramatrix.Unity.Editor
             View<ObjectView>(door, "object.corridor_door", -6.2f);
 
             EditorSceneManager.SaveScene(scene, CorridorScene);
+        }
+
+        // ---------------- UI ----------------
+
+        private static RectTransform BuildCanvas()
+        {
+            var canvasObject = new GameObject("UI", typeof(RectTransform));
+            var canvas = canvasObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasObject.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+            canvasObject.AddComponent<GraphicRaycaster>();
+            return (RectTransform)canvasObject.transform;
+        }
+
+        private static DialogueView BuildDialogueUi(RectTransform canvas, Camera camera)
+        {
+            var root = new GameObject("Dialogue", typeof(RectTransform)).GetComponent<RectTransform>();
+            root.SetParent(canvas, false);
+            Stretch(root);
+            var view = root.gameObject.AddComponent<DialogueView>();
+
+            // Speech bubble: anchored at its bottom centre, positioned above the speaker every frame.
+            var bubble = Panel("Bubble", root, new Color(1f, 1f, 1f, 0.95f));
+            bubble.pivot = new Vector2(0.5f, 0f);
+            bubble.anchorMin = bubble.anchorMax = Vector2.zero;
+            bubble.sizeDelta = new Vector2(440f, 0f);
+            bubble.GetComponent<Image>().raycastTarget = false;
+            var bubbleLayout = bubble.gameObject.AddComponent<VerticalLayoutGroup>();
+            bubbleLayout.padding = new RectOffset(18, 18, 12, 12);
+            bubbleLayout.childControlHeight = true;
+            bubbleLayout.childControlWidth = true;
+            bubble.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var bubbleText = Text("Text", bubble, 28f, Color.black, TextAlignmentOptions.Center);
+
+            // Visual novel panel across the bottom of the screen.
+            var novel = Panel("Novel", root, new Color(0.05f, 0.06f, 0.08f, 0.9f));
+            novel.anchorMin = new Vector2(0f, 0f);
+            novel.anchorMax = new Vector2(1f, 0f);
+            novel.pivot = new Vector2(0.5f, 0f);
+            novel.sizeDelta = new Vector2(-80f, 240f);
+            novel.anchoredPosition = new Vector2(0f, 40f);
+            novel.GetComponent<Image>().raycastTarget = false;
+            var speaker = Text("Name", novel, 32f, new Color(1f, 0.85f, 0.45f), TextAlignmentOptions.TopLeft);
+            Place(speaker.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(32f, -64f), new Vector2(-32f, -16f));
+            var text = Text("Text", novel, 30f, Color.white, TextAlignmentOptions.TopLeft);
+            Place(text.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(32f, 24f), new Vector2(-32f, -76f));
+
+            Set(view, "worldCamera", camera);
+            Set(view, "bubble", bubble);
+            Set(view, "bubbleText", bubbleText);
+            Set(view, "novelPanel", novel);
+            Set(view, "novelName", speaker);
+            Set(view, "novelText", text);
+            bubble.gameObject.SetActive(false);
+            novel.gameObject.SetActive(false);
+            return view;
+        }
+
+        private static InventoryView BuildInventoryUi(RectTransform canvas)
+        {
+            var root = new GameObject("Inventory", typeof(RectTransform)).GetComponent<RectTransform>();
+            root.SetParent(canvas, false);
+            Stretch(root);
+            var view = root.gameObject.AddComponent<InventoryView>();
+
+            var bar = Panel("Bar", root, new Color(0f, 0f, 0f, 0.45f));
+            bar.anchorMin = bar.anchorMax = bar.pivot = new Vector2(1f, 1f);
+            bar.anchoredPosition = new Vector2(-24f, -24f);
+            var layout = bar.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = 10f;
+            layout.childControlWidth = false;
+            layout.childControlHeight = false;
+            var fitter = bar.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var hover = Panel("Hover", root, new Color(0.05f, 0.06f, 0.08f, 0.92f));
+            hover.anchorMin = hover.anchorMax = hover.pivot = new Vector2(1f, 1f);
+            hover.anchoredPosition = new Vector2(-24f, -132f);
+            hover.sizeDelta = new Vector2(420f, 130f);
+            hover.GetComponent<Image>().raycastTarget = false;
+            var hoverName = Text("Name", hover, 28f, new Color(1f, 0.85f, 0.45f), TextAlignmentOptions.TopLeft);
+            Place(hoverName.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(16f, -50f), new Vector2(-16f, -10f));
+            var hoverText = Text("Description", hover, 24f, Color.white, TextAlignmentOptions.TopLeft);
+            Place(hoverText.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(16f, 10f), new Vector2(-16f, -54f));
+
+            Set(view, "slots", bar);
+            Set(view, "hoverPanel", hover);
+            Set(view, "hoverName", hoverName);
+            Set(view, "hoverDescription", hoverText);
+            hover.gameObject.SetActive(false);
+            return view;
+        }
+
+        private static RectTransform Panel(string name, RectTransform parent, Color color)
+        {
+            var panel = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            panel.SetParent(parent, false);
+            panel.gameObject.AddComponent<Image>().color = color;
+            return panel;
+        }
+
+        private static TextMeshProUGUI Text(string name, RectTransform parent, float size, Color color, TextAlignmentOptions alignment)
+        {
+            var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            var text = rect.gameObject.AddComponent<TextMeshProUGUI>();
+            text.fontSize = size;
+            text.color = color;
+            text.alignment = alignment;
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static void Stretch(RectTransform rect) =>
+            Place(rect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+        private static void Place(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.offsetMin = offsetMin;
+            rect.offsetMax = offsetMax;
         }
 
         // ---------------- helpers ----------------
