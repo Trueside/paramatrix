@@ -130,14 +130,25 @@ namespace Paramatrix.Unity
 
         private bool IsPointerOverUi() => eventSystem != null && eventSystem.IsPointerOverGameObject();
 
-        private EntityView ViewAt(Vector2 world)
+        /// <summary>The topmost shown, registered representation under a world point; null for empty space.</summary>
+        public EntityView ViewAt(Vector2 world)
         {
+            // Characters are moved by transform; physics sees the new positions only after its next step.
+            // Without this, a hero teleported to an entry point still "stands" where he was in the previous scene.
+            Physics2D.SyncTransforms();
+
             EntityView best = null;
             var bestOrder = int.MinValue;
             foreach (var hit in Physics2D.OverlapPointAll(world))
             {
                 var view = hit.GetComponentInParent<EntityView>();
                 if (view == null || !view.IsShown || _representations.Find(view.Id) != view)
+                {
+                    continue;
+                }
+
+                // The hero is drawn in front of everything; he is never the target of his own clicks.
+                if (view is CharacterView character && character.IsPlayer)
                 {
                     continue;
                 }

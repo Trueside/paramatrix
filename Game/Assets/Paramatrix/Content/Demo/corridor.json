@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "definitions": [
+    {
+      "id": "story.morpheus_meeting",
+      "states": {
+        "occurred": { "type": "boolean", "default": false, "persistence": "persistent", "mutation_policy": "scenario_only" }
+      }
+    },
+    {
+      "id": "condition.met_morpheus",
+      "condition": { "target": "story.morpheus_meeting", "property": "occurred", "operator": "equals", "value": true }
+    },
+
+    { "id": "character.morpheus", "name": "Морфеус", "initial_location": "location.corridor", "primary_interaction": "talk" },
+
+    {
+      "id": "dialogue.morpheus",
+      "mode": "vn",
+      "lines": [
+        { "speaker": "character.morpheus", "text": "Я ждал тебя." },
+        { "speaker": "character.paranoik", "text": "Мы знакомы?" },
+        { "speaker": "character.morpheus", "text": "Пока нет. Но ты давно чувствуешь, что с этим миром что-то не так." },
+        { "speaker": "character.morpheus", "text": "Всё, что ты видишь, — не настоящее." }
+      ]
+    },
+
+    {
+      "id": "event.meet_morpheus",
+      "execution": "exclusive",
+      "repeat": "once",
+      "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.morpheus" } ],
+      "actions": [
+        { "action": "dialogue", "dialogue": "dialogue.morpheus" },
+        { "action": "set_state", "target": "story.morpheus_meeting", "property": "occurred", "value": true }
+      ]
+    },
+
+    {
+      "id": "response.morpheus_after",
+      "tier": "specific",
+      "interaction": "talk",
+      "target": "character.morpheus",
+      "condition": { "ref": "condition.met_morpheus" },
+      "text": "Морфеус молча кивает."
+    },
+    { "id": "response.inspect_morpheus", "tier": "specific", "interaction": "inspect", "target": "character.morpheus", "text": "Тёмные очки. В коридоре без окон." }
+  ]
+}

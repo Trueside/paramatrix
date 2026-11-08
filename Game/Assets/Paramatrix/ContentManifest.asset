@@ -15,5 +15,7 @@ MonoBehaviour:
   entries:
   - path: Assets/Paramatrix/Content/Demo/core.json
     asset: {fileID: 4900000, guid: 3d5fe6cebd375a444bbd9632a830c14c, type: 3}
+  - path: Assets/Paramatrix/Content/Demo/corridor.json
+    asset: {fileID: 4900000, guid: a9f5df80e0db2ae498567ea3fc691446, type: 3}
   - path: Assets/Paramatrix/Content/Demo/office.json
     asset: {fileID: 4900000, guid: fbabd01364414b843a41005c230a2928, type: 3}

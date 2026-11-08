@@ -84,6 +84,21 @@ namespace Paramatrix.PlayTests
         }
 
         [UnityTest]
+        public IEnumerator HeroInFrontNeverTakesTheClick()
+        {
+            yield return FinishIntro();
+
+            // Stand in front of Trinity, then click her: the hero is drawn on top but must not be the target.
+            var trinity = ViewPosition("character.trinity");
+            _game.Hero.Walker.PlaceAt(trinity.x);
+            Assert.That(_game.Input.ViewAt(trinity).Id, Is.EqualTo(EntityId.Parse("character.trinity")));
+
+            _game.Input.ClickAt(trinity, PointerButton.Primary);
+            yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "Trinity dialogue");
+            Assert.That(_game.DialogueView.CurrentLine.Value.SpeakerName, Is.EqualTo("Тринити"));
+        }
+
+        [UnityTest]
         public IEnumerator RightClickInspectsWithoutWalking()
         {
             yield return FinishIntro();

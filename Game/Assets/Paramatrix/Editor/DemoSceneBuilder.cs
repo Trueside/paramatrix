@@ -133,6 +133,7 @@ namespace Paramatrix.Unity.Editor
             Set(bootstrap, "dialogueView", dialogue);
             Set(bootstrap, "inventoryView", inventory);
             Set(bootstrap, "worldPause", pause);
+            Set(bootstrap, "saveControls", BuildSaveControls(canvas, systems));
             Set(bootstrap, "overlay", overlay);
 
             EditorSceneManager.SaveScene(scene, BootstrapScene);
@@ -171,6 +172,11 @@ namespace Paramatrix.Unity.Editor
 
             var door = Block("Door (object.corridor_door)", sprite, new Color(0.45f, 0.3f, 0.18f), new Vector2(-7.2f, 1.2f), new Vector2(1.2f, 2.4f), 1);
             View<ObjectView>(door, "object.corridor_door", -6.2f);
+
+            var morpheus = Block("Morpheus (character.morpheus)", sprite, new Color(0.35f, 0.1f, 0.12f), new Vector2(6f, 0.95f), new Vector2(0.85f, 1.9f), 8);
+            morpheus.AddComponent<Walker>();
+            View<CharacterView>(morpheus, "character.morpheus", 5f);
+            Animations(morpheus);
 
             EditorSceneManager.SaveScene(scene, CorridorScene);
         }
@@ -269,6 +275,16 @@ namespace Paramatrix.Unity.Editor
             Set(view, "hoverDescription", hoverText);
             hover.gameObject.SetActive(false);
             return view;
+        }
+
+        private static SaveControls BuildSaveControls(RectTransform canvas, GameObject systems)
+        {
+            var controls = systems.AddComponent<SaveControls>();
+            var status = Text("Status", canvas, 30f, Color.white, TextAlignmentOptions.Top);
+            Place(status.rectTransform, new Vector2(0.25f, 1f), new Vector2(0.75f, 1f), new Vector2(0f, -80f), new Vector2(0f, -24f));
+            Set(controls, "status", status);
+            status.gameObject.SetActive(false);
+            return controls;
         }
 
         private static RectTransform Panel(string name, RectTransform parent, Color color)

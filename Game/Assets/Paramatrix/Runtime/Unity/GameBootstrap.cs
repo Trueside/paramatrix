@@ -33,6 +33,9 @@ namespace Paramatrix.Unity
         private WorldPause worldPause;
 
         [SerializeField]
+        private SaveControls saveControls;
+
+        [SerializeField]
         private DiagnosticsOverlay overlay;
 
         [SerializeField]
@@ -58,6 +61,8 @@ namespace Paramatrix.Unity
         public InventoryView InventoryView => inventoryView;
 
         public WorldPause WorldPause => worldPause;
+
+        public SaveControls SaveControls => saveControls;
 
         public TMPro.TMP_FontAsset Font { get; private set; }
 
@@ -122,6 +127,7 @@ namespace Paramatrix.Unity
             dialogueView.Bind(Representations, Diagnostics, Font);
             inventoryView.Bind(Session, Font);
             worldPause.Bind(Session.Flow);
+            saveControls.Bind(Session, Diagnostics, Font);
 
             if (startNewGameOnPlay)
             {

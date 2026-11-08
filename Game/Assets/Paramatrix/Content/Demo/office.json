@@ -102,7 +102,24 @@
       "execution": "exclusive",
       "repeat": "repeatable",
       "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.trinity" } ],
+      "launch_condition": { "not": { "ref": "condition.met_morpheus" } },
       "actions": [ { "action": "dialogue", "dialogue": "dialogue.trinity" } ]
+    },
+    {
+      "id": "event.talk_trinity_after_morpheus",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.trinity" } ],
+      "launch_condition": { "ref": "condition.met_morpheus" },
+      "actions": [ { "action": "dialogue", "dialogue": "dialogue.trinity_after_morpheus" } ]
+    },
+    {
+      "id": "dialogue.trinity_after_morpheus",
+      "mode": "vn",
+      "lines": [
+        { "speaker": "character.trinity", "text": "Ты его видел. По глазам вижу." },
+        { "speaker": "character.paranoik", "text": "Он сказал, что всё это — не настоящее." }
+      ]
     },
 
     { "id": "response.door_locked", "tier": "specific", "interaction": "exit", "target": "object.office_door", "condition": { "ref": "condition.door_is_locked" }, "text": "Заперто." },
