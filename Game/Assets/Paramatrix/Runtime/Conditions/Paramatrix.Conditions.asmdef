@@ -1,0 +1,17 @@
+{
+    "name": "Paramatrix.Conditions",
+    "rootNamespace": "Paramatrix.Conditions",
+    "references": [
+        "Paramatrix.Content",
+        "Paramatrix.State"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

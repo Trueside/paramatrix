@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Paramatrix.Tests</AssemblyName>
+    <RootNamespace>Paramatrix.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParamatrixRoot)Tests\EditMode\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Paramatrix.Content\Paramatrix.Content.csproj" />
+    <ProjectReference Include="..\Paramatrix.State\Paramatrix.State.csproj" />
+    <ProjectReference Include="..\Paramatrix.Conditions\Paramatrix.Conditions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- NUnit 3.x: the API surface used by the tests must stay compatible with Unity Test Framework's NUnit 3.5. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+  </ItemGroup>
+</Project>

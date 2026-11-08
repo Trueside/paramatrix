@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Paramatrix.State</AssemblyName>
+    <RootNamespace>Paramatrix.State</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParamatrixRuntime)State\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Paramatrix.Content\Paramatrix.Content.csproj" />
+  </ItemGroup>
+</Project>

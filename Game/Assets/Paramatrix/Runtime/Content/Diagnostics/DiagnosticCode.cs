@@ -1,0 +1,60 @@
+namespace Paramatrix.Content
+{
+    /// <summary>
+    /// Stable diagnostic codes. Tests and tooling match on these, never on message text.
+    /// New codes are appended; existing names are not renamed.
+    /// </summary>
+    public enum DiagnosticCode
+    {
+        // JSON structure
+        InvalidJson = 1,
+        UnexpectedJsonType,
+        MissingRequiredField,
+        UnknownField,
+        UnsupportedFormatVersion,
+
+        // Identifiers and references
+        InvalidEntityId,
+        InvalidPropertyName,
+        DuplicateId,
+        UnknownReference,
+        InvalidReferenceKind,
+
+        // Definitions
+        UnsupportedDefinitionKind,
+        EmptyText,
+        InvalidInteractionType,
+        MissingGameSettings,
+        PlayerCharacterWithoutLocation,
+
+        // State definitions
+        InvalidStateType,
+        InvalidPersistence,
+        InvalidMutationPolicy,
+        InvalidDefaultValue,
+        InvalidRange,
+        FieldNotApplicable,
+        EmptyEnumValues,
+        DuplicateEnumValue,
+        InvalidEnumValue,
+        BuiltInPropertyRedeclared,
+
+        // State System runtime
+        StateSubscriberFailed,
+        SnapshotUnknownEntity,
+        SnapshotUnknownProperty,
+        SnapshotNotPersistent,
+        SnapshotDuplicateEntry,
+        SnapshotMissingEntry,
+        SnapshotInvalidValue,
+
+        // Conditions
+        InvalidConditionForm,
+        EmptyCompoundCondition,
+        UnknownStateProperty,
+        InvalidOperator,
+        ConditionValueTypeMismatch,
+        InvalidComparisonValue,
+        ConditionCycle,
+    }
+}

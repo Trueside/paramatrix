@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Console build of the engine-free Paramatrix assemblies.
+    Sources live in the Unity project; each csproj mirrors one Unity asmdef,
+    so assembly boundaries (internal access, references) match Unity exactly.
+    LangVersion 9 = the C# version Unity 6000.4 compiles.
+  -->
+  <PropertyGroup>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ParamatrixRoot>$(MSBuildThisFileDirectory)..\Game\Assets\Paramatrix\</ParamatrixRoot>
+    <ParamatrixRuntime>$(ParamatrixRoot)Runtime\</ParamatrixRuntime>
+    <NewtonsoftJsonVersion>13.0.3</NewtonsoftJsonVersion>
+  </PropertyGroup>
+</Project>

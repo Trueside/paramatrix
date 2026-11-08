@@ -1,0 +1,16 @@
+{
+    "name": "Paramatrix.State",
+    "rootNamespace": "Paramatrix.State",
+    "references": [
+        "Paramatrix.Content"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

@@ -1,0 +1,37 @@
+# Unity (project lives in Game/)
+/Game/[Ll]ibrary/
+/Game/[Tt]emp/
+/Game/[Oo]bj/
+/Game/[Bb]uild/
+/Game/[Bb]uilds/
+/Game/[Ll]ogs/
+/Game/[Uu]ser[Ss]ettings/
+/Game/[Mm]emoryCaptures/
+/Game/[Rr]ecordings/
+/Game/*.csproj
+/Game/*.sln
+/Game/*.slnx
+/Game/*.unityproj
+/Game/*.user
+/Game/*.pidb
+/Game/*.booproj
+/Game/*.svd
+/Game/*.pdb
+/Game/*.mdb
+/Game/*.opendb
+/Game/*.VC.db
+/Game/sysinfo.txt
+/Game/crashlytics-build.properties
+/Game/Assets/Plugins/Editor/JetBrains*
+/Game/.vsconfig
+
+# Console build (tools/)
+/tools/**/bin/
+/tools/**/obj/
+/tools/**/TestResults/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp

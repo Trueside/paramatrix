@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Paramatrix.Content</AssemblyName>
+    <RootNamespace>Paramatrix.Content</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParamatrixRuntime)Content\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+  </ItemGroup>
+</Project>
