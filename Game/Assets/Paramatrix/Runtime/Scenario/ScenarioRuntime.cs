@@ -41,6 +41,10 @@ namespace Paramatrix.Scenario
         private readonly Queue<InboxItem> _inbox = new Queue<InboxItem>();
         private readonly List<int> _exclusiveQueue = new List<int>();
 
+        private readonly List<Monitor> _monitors = new List<Monitor>();
+        private readonly Dictionary<StateAddress, List<int>> _monitorsByAddress = new Dictionary<StateAddress, List<int>>();
+        private readonly HashSet<OperationHandle> _abandoned = new HashSet<OperationHandle>();
+
         private Chain _active;
         private bool _started;
         private bool _pumping;
@@ -107,6 +111,34 @@ namespace Paramatrix.Scenario
             {
                 _responses.Add((ResponseDefinition)definition);
             }
+
+            // ConditionsMet monitors (0.3.2 §8, Addendum §4): one per trigger, in event ID order,
+            // indexed by every State address the condition reads (T2).
+            for (var i = 0; i < _events.Count; i++)
+            {
+                foreach (var trigger in _events[i].Definition.Triggers)
+                {
+                    if (trigger.Type != TriggerType.ConditionsMet)
+                    {
+                        continue;
+                    }
+
+                    var monitorIndex = _monitors.Count;
+                    _monitors.Add(new Monitor(i, trigger.Condition));
+                    foreach (var address in _conditions.GetDependencies(trigger.Condition))
+                    {
+                        if (!_monitorsByAddress.TryGetValue(address, out var list))
+                        {
+                            _monitorsByAddress.Add(address, list = new List<int>());
+                        }
+
+                        list.Add(monitorIndex);
+                    }
+                }
+            }
+
+            // A condition that is already true when monitoring begins does not fire.
+            RecomputeBaselines();
 
             // Only enqueue: Scenario never processes anything inside SetState (0.3.1 §6.2). Pumping from here would
             // also run while State System is still dispatching, deferring further notifications past the end of the
@@ -190,6 +222,192 @@ namespace Paramatrix.Scenario
         }
 
         // ======================================================================
+        // save / load / recovery
+        // ======================================================================
+
+        /// <summary>
+        /// Saving is possible only when Scenario is idle: no active chain, nothing queued, nothing unprocessed (T6).
+        /// Active execution is never saved (0.4 §19).
+        /// </summary>
+        public bool CanSave => _started && !_pumping && _active == null && _exclusiveQueue.Count == 0 && _inbox.Count == 0;
+
+        public ScenarioSnapshot Export()
+        {
+            EnsureStarted();
+            if (!CanSave)
+            {
+                throw new InvalidOperationException("Scenario state can be exported only when CanSave is true.");
+            }
+
+            var records = new List<EventRecord>();
+            foreach (var runtime in _events)
+            {
+                records.Add(new EventRecord(runtime.Definition.Id, runtime.EverCompleted, runtime.LastCompletedVisit));
+            }
+
+            return new ScenarioSnapshot(CurrentVisit, records);
+        }
+
+        /// <summary>
+        /// Restores completion history and the current Visit, after State was restored. Checks the whole snapshot
+        /// first (decision A15): it must describe exactly the events of current content. Restore creates no Visit and
+        /// no triggers; Failed is not saved, so every event is available again by its repeat policy (Р3);
+        /// monitor baselines are recomputed from the restored State.
+        /// </summary>
+        public ScenarioRestoreResult Restore(ScenarioSnapshot snapshot, string sourceName)
+        {
+            EnsureStarted();
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            if (!CanSave)
+            {
+                throw new InvalidOperationException("Scenario can be restored only when it is idle; abort the active execution first.");
+            }
+
+            var location = new SourceLocation(sourceName ?? "<snapshot>", null, 0, 0);
+            var errors = new DiagnosticBag();
+            if (snapshot.CurrentVisit < 0)
+            {
+                errors.Error(DiagnosticCode.SnapshotInvalidValue, location, $"Saved visit number {snapshot.CurrentVisit} is negative.");
+            }
+
+            var records = new EventRecord?[_events.Count];
+            foreach (var record in snapshot.Events)
+            {
+                if (!_eventIndex.TryGetValue(record.Event, out var index))
+                {
+                    errors.Error(DiagnosticCode.SnapshotUnknownEntity, location, $"Saved event {record.Event} does not exist in current content.");
+                    continue;
+                }
+
+                if (records[index].HasValue)
+                {
+                    errors.Error(DiagnosticCode.SnapshotDuplicateEntry, location, $"Event {record.Event} is saved twice.");
+                    continue;
+                }
+
+                var consistent = record.LastCompletedVisit >= -1
+                    && record.LastCompletedVisit <= snapshot.CurrentVisit
+                    && (record.EverCompleted || record.LastCompletedVisit == -1);
+                if (!consistent)
+                {
+                    errors.Error(DiagnosticCode.SnapshotInvalidValue, location,
+                        $"Event {record.Event}: completed={record.EverCompleted}, last visit {record.LastCompletedVisit} does not fit current visit {snapshot.CurrentVisit}.");
+                    continue;
+                }
+
+                records[index] = record;
+            }
+
+            for (var i = 0; i < _events.Count; i++)
+            {
+                if (!records[i].HasValue && _eventIndex.ContainsKey(_events[i].Definition.Id) && !Contains(snapshot, _events[i].Definition.Id))
+                {
+                    errors.Error(DiagnosticCode.SnapshotMissingEntry, location, $"Event {_events[i].Definition.Id} is missing from the save.");
+                }
+            }
+
+            if (errors.Items.Count > 0)
+            {
+                return new ScenarioRestoreResult(errors.Items);
+            }
+
+            CurrentVisit = snapshot.CurrentVisit;
+            for (var i = 0; i < _events.Count; i++)
+            {
+                var record = records[i].Value;
+                _events[i].EverCompleted = record.EverCompleted;
+                _events[i].LastCompletedVisit = record.LastCompletedVisit;
+                _events[i].Status = record.EverCompleted ? EventStatus.Completed : EventStatus.Idle;
+            }
+
+            _lastGeneric.Clear();
+            RecomputeBaselines();
+            return new ScenarioRestoreResult(Array.Empty<Diagnostic>());
+        }
+
+        /// <summary>
+        /// Recovery from a hung execution (T7): the active chain's events become Failed, control is released with
+        /// <see cref="ReleaseReason.Aborted"/>, a late completion of its pending operation is ignored.
+        /// </summary>
+        public void AbortActiveChain(string reason)
+        {
+            EnsureStarted();
+            if (_pumping)
+            {
+                throw new InvalidOperationException("AbortActiveChain cannot be called while Scenario is processing.");
+            }
+
+            var chain = _active;
+            if (chain == null)
+            {
+                return;
+            }
+
+            _active = null;
+            if (chain.Pending.HasValue)
+            {
+                _abandoned.Add(chain.Pending.Value);
+            }
+
+            var what = chain.Kind == ChainKind.Response ? "response " + chain.Response.Id : _events[chain.Frames[0].Event].Definition.Id.ToString();
+            Report(DiagnosticCode.ChainAborted, Severity.Error,
+                chain.Kind == ChainKind.Response ? chain.Response.Source : _events[chain.Frames[0].Event].Definition.Source,
+                $"Execution of {what} was aborted: {reason}");
+
+            foreach (var frame in chain.Frames)
+            {
+                _events[frame.Event].Status = EventStatus.Failed;
+            }
+
+            chain.Frames.Clear();
+            chain.Pending = null;
+            _ports.GameFlow.ReleaseScenarioControl(chain.Token.Value, ReleaseReason.Aborted);
+        }
+
+        /// <summary>Drops queued exclusive requests and unprocessed triggers (Loading, Recovery; 0.4 §7.4).</summary>
+        public void ClearPendingRequests()
+        {
+            EnsureStarted();
+            if (_pumping)
+            {
+                throw new InvalidOperationException("ClearPendingRequests cannot be called while Scenario is processing.");
+            }
+
+            _exclusiveQueue.Clear();
+            var keep = new List<InboxItem>();
+            foreach (var item in _inbox)
+            {
+                if (item.IsOperation)
+                {
+                    keep.Add(item);
+                }
+            }
+
+            _inbox.Clear();
+            foreach (var item in keep)
+            {
+                _inbox.Enqueue(item);
+            }
+        }
+
+        private static bool Contains(ScenarioSnapshot snapshot, EntityId id)
+        {
+            foreach (var record in snapshot.Events)
+            {
+                if (record.Event == id)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // ======================================================================
         // inbox
         // ======================================================================
 
@@ -212,6 +430,11 @@ namespace Paramatrix.Scenario
 
             var trigger = item.Trigger;
             var candidates = Candidates(trigger);
+            if (trigger.Type == TriggerType.StateChanged)
+            {
+                MergeSorted(candidates, EvaluateMonitors(trigger.Change.Value.Address));
+            }
+
             if (trigger.Origin == TriggerOrigin.Player && trigger.Type == TriggerType.Interaction)
             {
                 ResolvePlayerAction(trigger, candidates);
@@ -243,6 +466,67 @@ namespace Paramatrix.Scenario
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Re-evaluates the monitors that read this address against current State.
+        /// Returns events whose condition went False → True; every baseline is updated (T2).
+        /// </summary>
+        private List<int> EvaluateMonitors(StateAddress address)
+        {
+            var fired = new List<int>();
+            if (!_monitorsByAddress.TryGetValue(address, out var affected))
+            {
+                return fired;
+            }
+
+            foreach (var monitorIndex in affected)
+            {
+                var monitor = _monitors[monitorIndex];
+                var result = EvaluateMonitor(monitor);
+                if (monitor.Previous == ConditionOutcome.False && result == ConditionOutcome.True && !fired.Contains(monitor.Event))
+                {
+                    fired.Add(monitor.Event);
+                }
+
+                monitor.Previous = result;
+            }
+
+            fired.Sort();
+            return fired;
+        }
+
+        private ConditionOutcome EvaluateMonitor(Monitor monitor)
+        {
+            var result = _conditions.Evaluate(monitor.Condition);
+            if (result.IsError)
+            {
+                // Error → True is not a False → True edge: it never fires.
+                ReportConditionError(_events[monitor.Event].Definition.Source, _events[monitor.Event].Definition.Id, result);
+            }
+
+            return result.Outcome;
+        }
+
+        /// <summary>Baseline from current State, without firing (monitor registration, Restore).</summary>
+        private void RecomputeBaselines()
+        {
+            foreach (var monitor in _monitors)
+            {
+                monitor.Previous = EvaluateMonitor(monitor);
+            }
+        }
+
+        private static void MergeSorted(List<int> into, List<int> more)
+        {
+            foreach (var index in more)
+            {
+                var position = into.BinarySearch(index);
+                if (position < 0)
+                {
+                    into.Insert(~position, index);
+                }
+            }
         }
 
         private void LaunchAutomatic(int index)
@@ -862,6 +1146,11 @@ namespace Paramatrix.Scenario
 
         private void OnOperationCompleted(OperationHandle handle, OperationOutcome outcome)
         {
+            if (_abandoned.Remove(handle))
+            {
+                return; // its chain was aborted; the late completion carries no meaning
+            }
+
             var chain = _active;
             if (chain == null || !chain.Pending.HasValue || !chain.Pending.Value.Equals(handle))
             {
@@ -1038,6 +1327,22 @@ namespace Paramatrix.Scenario
             public bool EverCompleted { get; set; }
 
             public int LastCompletedVisit { get; set; } = -1;
+        }
+
+        private sealed class Monitor
+        {
+            public Monitor(int @event, ConditionNode condition)
+            {
+                Event = @event;
+                Condition = condition;
+            }
+
+            public int Event { get; }
+
+            public ConditionNode Condition { get; }
+
+            /// <summary>Result at the last evaluation (True, False or Error); owned by Scenario, not by Condition System.</summary>
+            public ConditionOutcome Previous { get; set; }
         }
 
         private sealed class Frame

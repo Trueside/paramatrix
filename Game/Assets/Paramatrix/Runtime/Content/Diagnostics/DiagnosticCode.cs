@@ -97,5 +97,6 @@ namespace Paramatrix.Content
         PlayerActionRejected,
         CascadeLimitExceeded,
         CallDepthExceeded,
+        ChainAborted,
     }
 }
