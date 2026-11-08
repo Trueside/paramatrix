@@ -81,5 +81,21 @@ namespace Paramatrix.Content
         GenericPoolTooSmall,
         DuplicateResponse,
         InvalidValue,
+
+        // Scenario runtime
+        MutationRejected,
+        ConditionEvaluationFailed,
+        OperationFailed,
+        OperationCancelled,
+        OperationContractViolation,
+        InventoryOperationFailed,
+        CallUnavailable,
+        StartUnavailable,
+        EventBlockedByFailure,
+        AmbiguousPlayerAction,
+        AmbiguousResponse,
+        PlayerActionRejected,
+        CascadeLimitExceeded,
+        CallDepthExceeded,
     }
 }

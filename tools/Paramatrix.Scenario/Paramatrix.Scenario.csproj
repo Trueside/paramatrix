@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Paramatrix.Scenario</AssemblyName>
+    <RootNamespace>Paramatrix.Scenario</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParamatrixRuntime)Scenario\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Paramatrix.Content\Paramatrix.Content.csproj" />
+    <ProjectReference Include="..\Paramatrix.State\Paramatrix.State.csproj" />
+    <ProjectReference Include="..\Paramatrix.Conditions\Paramatrix.Conditions.csproj" />
+  </ItemGroup>
+</Project>

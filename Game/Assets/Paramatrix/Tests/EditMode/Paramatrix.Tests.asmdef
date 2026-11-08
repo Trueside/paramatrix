@@ -5,6 +5,7 @@
         "Paramatrix.Content",
         "Paramatrix.State",
         "Paramatrix.Conditions",
+        "Paramatrix.Scenario",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
