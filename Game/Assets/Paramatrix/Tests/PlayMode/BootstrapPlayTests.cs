@@ -99,6 +99,20 @@ namespace Paramatrix.PlayTests
         }
 
         [UnityTest]
+        public IEnumerator ClickAreaFollowsTheSpriteRightAfterATeleport()
+        {
+            yield return FinishIntro();
+
+            // No physics in picking: a character moved this very frame is clickable at its new place at once.
+            var trinity = _game.Representations.Find(EntityId.Parse("character.trinity"));
+            var oldPosition = (Vector2)trinity.transform.position;
+            trinity.GetComponent<Walker>().PlaceAt(-3f);
+
+            Assert.That(_game.Input.ViewAt(new Vector2(-3f, oldPosition.y)), Is.SameAs(trinity));
+            Assert.That(_game.Input.ViewAt(oldPosition), Is.Not.SameAs(trinity));
+        }
+
+        [UnityTest]
         public IEnumerator RightClickInspectsWithoutWalking()
         {
             yield return FinishIntro();
@@ -124,11 +138,38 @@ namespace Paramatrix.PlayTests
             _game.Session.Interaction.ClickInventoryItem(EntityId.Parse("item.key"), PointerButton.Primary);
             _game.Input.ClickAt(ViewPosition("object.office_door"), PointerButton.Primary);
             yield return WaitUntil(() => !_game.Session.State.Get(StateAddress.Parse("object.office_door", "locked")).AsBoolean, "door unlocked");
+            yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "unlock line");
+            Assert.That(_game.DialogueView.CurrentLine.Value.Text, Is.EqualTo("Замок щёлкнул. Дверь открыта."));
+            yield return FinishIntro();
             yield return WaitUntil(() => _game.Session.Flow.Owner == ControlOwner.Player, "unlock scene finished");
 
+            // Record what the player would see at every Game Flow change during the transition.
+            var coveredDuringTransition = true;
+            var transitionSeen = false;
+            float? heroXWhenUncovered = null;
+            void Watch()
+            {
+                var flow = _game.Session.Flow;
+                if (flow.InTransition)
+                {
+                    transitionSeen = true;
+                    coveredDuringTransition &= _game.TransitionCurtain.IsShown;
+                }
+                else if (transitionSeen && heroXWhenUncovered == null)
+                {
+                    heroXWhenUncovered = _game.Hero.X;
+                }
+            }
+
+            _game.Session.Flow.Changed += Watch;
             _game.Input.ClickAt(ViewPosition("object.office_door"), PointerButton.Primary);
             yield return WaitUntil(() => _game.Scenes.CurrentScene == "Location_Corridor" && _game.Session.Flow.Owner == ControlOwner.Player, "transition");
+            _game.Session.Flow.Changed -= Watch;
 
+            Assert.That(transitionSeen, Is.True);
+            Assert.That(coveredDuringTransition, Is.True, "the screen is covered for the whole transition");
+            Assert.That(heroXWhenUncovered, Is.EqualTo(-6f).Within(0.01f), "the hero is at the entry point before the cover is lifted");
+            Assert.That(_game.TransitionCurtain.IsShown, Is.False);
             Assert.That(_game.Session.Location.CurrentLocation.Value, Is.EqualTo("location.corridor"));
             Assert.That(_game.Hero.X, Is.EqualTo(-6f).Within(0.01f), "entry point from_office");
             Assert.That(_game.Representations.Find(EntityId.Parse("object.office_door")), Is.Null, "office views unregistered");

@@ -36,6 +36,11 @@
       "lines": [ { "speaker": "character.paranoik", "text": "Опять этот офис." } ]
     },
     {
+      "id": "dialogue.door_unlocked",
+      "mode": "minimal",
+      "lines": [ { "speaker": "character.paranoik", "text": "Замок щёлкнул. Дверь открыта." } ]
+    },
+    {
       "id": "dialogue.trinity",
       "mode": "vn",
       "lines": [
@@ -76,7 +81,9 @@
       "launch_condition": { "ref": "condition.door_is_locked" },
       "actions": [
         { "action": "set_state", "target": "object.office_door", "property": "locked", "value": false },
-        { "action": "clear_selection" }
+        { "action": "inventory", "item": "item.key", "to": "consumed" },
+        { "action": "clear_selection" },
+        { "action": "dialogue", "dialogue": "dialogue.door_unlocked" }
       ]
     },
 

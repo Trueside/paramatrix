@@ -58,6 +58,8 @@ unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.ProjectVa
 - Ресурсы TextMesh Pro (`Game/Assets/TextMesh Pro`) лежат в репозитории. `AssetDatabase.ImportPackage` в пакетном режиме не успевает выполниться до выхода Unity; если ресурсы понадобится обновить — меню «Paramatrix → Import TMP Essentials» в открытом редакторе.
 - Шрифт текста — системный Segoe UI через динамический TMP-ассет (`UiFonts`): в проект шрифт не копируется. Финальный шрифт — решение по оформлению.
 - Мировые часы: VN-диалог ставит `Time.timeScale = 0` (`WorldPause`), всё мировое движение — на scaled time, UI и Scenario от времени не зависят.
+- Физики в игре нет. Клик по объекту — попадание в границы спрайтов представления (`EntityView.Contains`), без коллайдеров. Модуль `physics2d` удалён; модули `physics` и `terrain` остаются только как зависимости URP, авто-симуляция 3D-физики выключена (`DynamicsManager`).
+- В `Packages/manifest.json` — только то, чем проект пользуется: `audio` и `animation` оставлены под звук и анимации из Architecture 0.3. Новый пакет или модуль — по согласию пользователя.
 
 ## Правила кода
 

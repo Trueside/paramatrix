@@ -25,6 +25,10 @@ namespace Paramatrix.Unity
         [SerializeField]
         private TextMeshProUGUI hoverDescription;
 
+        [SerializeField]
+        [Tooltip("Shown while an item is selected: what it is and how to use or cancel it.")]
+        private TextMeshProUGUI selectionHint;
+
         private readonly List<InventorySlot> _slots = new List<InventorySlot>();
         private GameSession _session;
         private TMP_FontAsset _font;
@@ -38,13 +42,17 @@ namespace Paramatrix.Unity
 
         public string HoverDescription => hoverDescription.text;
 
+        public string SelectionHint => selectionHint.gameObject.activeSelf ? selectionHint.text : null;
+
         public void Bind(GameSession session, TMP_FontAsset font)
         {
             _session = session;
             _font = font;
             hoverName.font = font;
             hoverDescription.font = font;
+            selectionHint.font = font;
             hoverPanel.gameObject.SetActive(false);
+            selectionHint.gameObject.SetActive(false);
 
             session.State.Changed += change =>
             {
@@ -105,9 +113,17 @@ namespace Paramatrix.Unity
 
         private void RefreshSelection()
         {
+            var selected = _session.Inventory.Selected;
             foreach (var slot in _slots)
             {
-                slot.SetSelected(_session.Inventory.Selected == slot.Item);
+                slot.SetSelected(selected == slot.Item);
+            }
+
+            selectionHint.gameObject.SetActive(selected.HasValue);
+            if (selected.HasValue)
+            {
+                var name = _session.Registry.Get<ItemDefinition>(selected.Value).Name;
+                selectionHint.text = $"Выбрано: {name}. Кликните по тому, к чему применить (ПКМ — отменить).";
             }
         }
 

@@ -36,6 +36,9 @@ namespace Paramatrix.Unity
         private SaveControls saveControls;
 
         [SerializeField]
+        private TransitionCurtain transitionCurtain;
+
+        [SerializeField]
         private DiagnosticsOverlay overlay;
 
         [SerializeField]
@@ -63,6 +66,8 @@ namespace Paramatrix.Unity
         public WorldPause WorldPause => worldPause;
 
         public SaveControls SaveControls => saveControls;
+
+        public TransitionCurtain TransitionCurtain => transitionCurtain;
 
         public TMPro.TMP_FontAsset Font { get; private set; }
 
@@ -127,6 +132,7 @@ namespace Paramatrix.Unity
             dialogueView.Bind(Representations, Diagnostics, Font);
             inventoryView.Bind(Session, Font);
             worldPause.Bind(Session.Flow);
+            transitionCurtain.Bind(Session.Flow); // before StartNewGame: the first scene load is covered too
             saveControls.Bind(Session, Diagnostics, Font);
 
             if (startNewGameOnPlay)

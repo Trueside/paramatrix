@@ -7,7 +7,7 @@ namespace Paramatrix.Unity
 {
     /// <summary>
     /// Input System → game (Architecture 0.3 §5.3): keyboard walks, left click = primary, right click = inspect,
-    /// click / Space advances dialogue. Every action is gated by <see cref="GameFlow.Permissions"/>; this class
+    /// any key or mouse button advances dialogue. Every action is gated by <see cref="GameFlow.Permissions"/>; this class
     /// never locks input itself and contains no game rules. Public methods are the same entry points tests use.
     /// </summary>
     [DefaultExecutionOrder(-100)]
@@ -42,7 +42,12 @@ namespace Paramatrix.Unity
             _move.AddCompositeBinding("1DAxis").With("Negative", "<Keyboard>/leftArrow").With("Positive", "<Keyboard>/rightArrow");
             _primary = new InputAction("primary", binding: "<Mouse>/leftButton");
             _secondary = new InputAction("secondary", binding: "<Mouse>/rightButton");
-            _advance = new InputAction("advance", binding: "<Keyboard>/space");
+            // Any key or mouse button advances a dialogue: the player must never be stuck on a line.
+            _advance = new InputAction("advance");
+            _advance.AddBinding("<Keyboard>/anyKey");
+            _advance.AddBinding("<Mouse>/leftButton");
+            _advance.AddBinding("<Mouse>/rightButton");
+            _advance.AddBinding("<Mouse>/middleButton");
             _move.Enable();
             _primary.Enable();
             _secondary.Enable();
@@ -67,7 +72,7 @@ namespace Paramatrix.Unity
             var permissions = _session.Flow.Permissions;
             if ((permissions & PlayerPermissions.AdvanceDialogue) != 0)
             {
-                if (_advance.WasPressedThisFrame() || _primary.WasPressedThisFrame())
+                if (_advance.WasPressedThisFrame())
                 {
                     AdvanceDialogue();
                 }
@@ -133,16 +138,12 @@ namespace Paramatrix.Unity
         /// <summary>The topmost shown, registered representation under a world point; null for empty space.</summary>
         public EntityView ViewAt(Vector2 world)
         {
-            // Characters are moved by transform; physics sees the new positions only after its next step.
-            // Without this, a hero teleported to an entry point still "stands" where he was in the previous scene.
-            Physics2D.SyncTransforms();
-
+            // Hit test against sprite bounds of registered views: no physics, so positions are never stale.
             EntityView best = null;
             var bestOrder = int.MinValue;
-            foreach (var hit in Physics2D.OverlapPointAll(world))
+            foreach (var view in _representations.AllViews)
             {
-                var view = hit.GetComponentInParent<EntityView>();
-                if (view == null || !view.IsShown || _representations.Find(view.Id) != view)
+                if (!view.IsShown || !view.Contains(world))
                 {
                     continue;
                 }
@@ -153,9 +154,8 @@ namespace Paramatrix.Unity
                     continue;
                 }
 
-                var sprite = view.GetComponentInChildren<SpriteRenderer>();
-                var order = sprite == null ? 0 : sprite.sortingOrder;
-                if (order > bestOrder)
+                var order = view.SortingOrder;
+                if (best == null || order > bestOrder)
                 {
                     best = view;
                     bestOrder = order;

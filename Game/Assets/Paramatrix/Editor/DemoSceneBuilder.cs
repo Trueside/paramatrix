@@ -134,6 +134,7 @@ namespace Paramatrix.Unity.Editor
             Set(bootstrap, "inventoryView", inventory);
             Set(bootstrap, "worldPause", pause);
             Set(bootstrap, "saveControls", BuildSaveControls(canvas, systems));
+            Set(bootstrap, "transitionCurtain", BuildCurtain(canvas, systems));
             Set(bootstrap, "overlay", overlay);
 
             EditorSceneManager.SaveScene(scene, BootstrapScene);
@@ -261,7 +262,7 @@ namespace Paramatrix.Unity.Editor
 
             var hover = Panel("Hover", root, new Color(0.05f, 0.06f, 0.08f, 0.92f));
             hover.anchorMin = hover.anchorMax = hover.pivot = new Vector2(1f, 1f);
-            hover.anchoredPosition = new Vector2(-24f, -132f);
+            hover.anchoredPosition = new Vector2(-24f, -170f); // below the selection hint
             hover.sizeDelta = new Vector2(420f, 130f);
             hover.GetComponent<Image>().raycastTarget = false;
             var hoverName = Text("Name", hover, 28f, new Color(1f, 0.85f, 0.45f), TextAlignmentOptions.TopLeft);
@@ -274,7 +275,24 @@ namespace Paramatrix.Unity.Editor
             Set(view, "hoverName", hoverName);
             Set(view, "hoverDescription", hoverText);
             hover.gameObject.SetActive(false);
+
+            var hint = Text("Selection hint", root, 26f, new Color(1f, 0.85f, 0.2f), TextAlignmentOptions.TopRight);
+            Place(hint.rectTransform, new Vector2(0.4f, 1f), new Vector2(1f, 1f), new Vector2(0f, -150f), new Vector2(-24f, -110f));
+            Set(view, "selectionHint", hint);
+            hint.gameObject.SetActive(false);
             return view;
+        }
+
+        /// <summary>Full-screen black cover on top of the game UI, shown only during location transitions.</summary>
+        private static TransitionCurtain BuildCurtain(RectTransform canvas, GameObject systems)
+        {
+            var cover = Panel("Transition curtain", canvas, Color.black);
+            Stretch(cover);
+            cover.SetAsLastSibling();
+            var curtain = systems.AddComponent<TransitionCurtain>();
+            Set(curtain, "curtain", cover.gameObject);
+            cover.gameObject.SetActive(false);
+            return curtain;
         }
 
         private static SaveControls BuildSaveControls(RectTransform canvas, GameObject systems)
@@ -357,7 +375,6 @@ namespace Paramatrix.Unity.Editor
             renderer.sprite = sprite;
             renderer.color = color;
             renderer.sortingOrder = order;
-            gameObject.AddComponent<BoxCollider2D>();
             return gameObject;
         }
 

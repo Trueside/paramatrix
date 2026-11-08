@@ -35,7 +35,7 @@ namespace Paramatrix.Unity
             slot._background.color = color;
             slot._outline = gameObject.AddComponent<Outline>();
             slot._outline.effectColor = new Color(1f, 0.85f, 0.2f);
-            slot._outline.effectDistance = new Vector2(4f, -4f);
+            slot._outline.effectDistance = new Vector2(6f, -6f);
             slot._outline.enabled = false;
 
             // Placeholder icon until item art exists: the first letter of the item name.
@@ -60,6 +60,7 @@ namespace Paramatrix.Unity
         {
             IsSelected = selected;
             _outline.enabled = selected;
+            transform.localScale = selected ? new Vector3(1.15f, 1.15f, 1f) : Vector3.one;
         }
 
         public void OnPointerClick(PointerEventData eventData)

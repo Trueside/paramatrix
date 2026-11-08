@@ -77,6 +77,23 @@ namespace Paramatrix.Unity
 
         public IEnumerable<EntityView> SceneViews => _scene.Values;
 
+        /// <summary>Every registered view: persistent ones (the hero) and those of the current scene.</summary>
+        public IEnumerable<EntityView> AllViews
+        {
+            get
+            {
+                foreach (var view in _persistent.Values)
+                {
+                    yield return view;
+                }
+
+                foreach (var view in _scene.Values)
+                {
+                    yield return view;
+                }
+            }
+        }
+
         private bool Register(EntityView view, Dictionary<EntityId, EntityView> into)
         {
             var problem = SceneStructure.ViewProblem(view, _content, out var id);

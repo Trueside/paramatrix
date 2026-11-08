@@ -54,7 +54,9 @@ namespace Paramatrix.PlayTests
             yield return WaitUntil(() => Carried("item.key") && PlayerHasControl(), "key taken");
             _game.InventoryView.Click(EntityId.Parse("item.key"), PointerButton.Primary);
             Click("object.office_door");
-            yield return WaitUntil(() => !Flag("object.office_door", "locked") && PlayerHasControl(), "door unlocked");
+            yield return WaitUntil(() => !Flag("object.office_door", "locked") && _game.DialogueView.CurrentLine.HasValue, "door unlocked");
+            yield return FinishDialogue();
+            yield return WaitUntil(PlayerHasControl, "unlock scene finished");
             Click("object.office_door");
             yield return WaitUntil(() => _game.Scenes.CurrentScene == "Location_Corridor" && PlayerHasControl(), "corridor");
 
@@ -95,8 +97,8 @@ namespace Paramatrix.PlayTests
             Assert.That(_game.Session.Scenario.CurrentVisit, Is.EqualTo(visitAtSave), "Load creates no Visit");
             Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "no intro, no scene on load");
             Assert.That(Flag("story.morpheus_meeting", "occurred"), Is.True);
-            Assert.That(Carried("item.key"), Is.True);
-            Assert.That(_game.InventoryView.Slots.Select(s => s.Item.Value), Is.EqualTo(new[] { "item.key" }));
+            Assert.That(_game.Session.State.Get(StateAddress.Parse("item.key", "holder")).AsEnum, Is.EqualTo("consumed"), "the key was used up on the door");
+            Assert.That(_game.InventoryView.Slots, Is.Empty);
 
             // The once-meeting is used up: the specific response answers instead.
             Click("character.morpheus");
@@ -129,11 +131,6 @@ namespace Paramatrix.PlayTests
         {
             var view = _game.Representations.Find(EntityId.Parse(id));
             Assert.That(view, Is.Not.Null, id + " has no representation");
-            var hits = Physics2D.OverlapPointAll(view.transform.position);
-            var collider = view.GetComponent<Collider2D>();
-            Assert.That(hits.Any(h => h.GetComponentInParent<EntityView>() == view), Is.True,
-                $"click on {id} at {view.transform.position}: shown={view.IsShown} colliderEnabled={collider.enabled} " +
-                $"bounds={collider.bounds} hits=[{string.Join(", ", hits.Select(h => h.name))}]");
             var picked = _game.Input.ViewAt(view.transform.position);
             Assert.That(picked == view, Is.True,
                 $"pick at {id}: picked={(picked == null ? "null" : picked.name)} shown={view.IsShown} registered={_game.Representations.Find(view.Id) == view} id={view.Id}");

@@ -79,7 +79,6 @@ namespace Paramatrix.EditorTests
             where T : EntityView
         {
             var gameObject = Make(scene, "View " + id);
-            gameObject.AddComponent<BoxCollider2D>();
             if (typeof(T) == typeof(CharacterView))
             {
                 gameObject.AddComponent<Walker>();

@@ -7,9 +7,9 @@ namespace Paramatrix.Unity
 {
     /// <summary>
     /// Unity representation of one entity (Architecture 0.3 §3.3, §5.7). Identified only by its stable Entity ID,
-    /// never by GameObject name. Shows Logical State; owns none of it. Provides the hitbox and the approach point.
+    /// never by GameObject name. Shows Logical State; owns none of it. Provides the click area and the approach point.
+    /// The click area is the bounds of the view's sprites: no physics is involved, so it is always where the sprite is.
     /// </summary>
-    [RequireComponent(typeof(Collider2D))]
     public abstract class EntityView : MonoBehaviour
     {
         [SerializeField]
@@ -20,8 +20,7 @@ namespace Paramatrix.Unity
         [Tooltip("Where a character stands to interact. Empty: the view's own position.")]
         private Transform approachPoint;
 
-        private Renderer[] _renderers;
-        private Collider2D[] _colliders;
+        private SpriteRenderer[] _sprites;
 
         public string RawEntityId => entityId;
 
@@ -35,11 +34,42 @@ namespace Paramatrix.Unity
         /// <summary>The kind of entity this view type represents.</summary>
         public abstract EntityKind Kind { get; }
 
+        /// <summary>Drawing order of the topmost sprite; a click goes to the view drawn on top.</summary>
+        public int SortingOrder
+        {
+            get
+            {
+                var order = int.MinValue;
+                foreach (var sprite in Sprites)
+                {
+                    order = Mathf.Max(order, sprite.sortingOrder);
+                }
+
+                return order;
+            }
+        }
+
+        private SpriteRenderer[] Sprites => _sprites ?? (_sprites = GetComponentsInChildren<SpriteRenderer>(true));
+
+        /// <summary>Whether a world point lies on one of the view's sprites (their 2D bounds).</summary>
+        public bool Contains(Vector2 world)
+        {
+            foreach (var sprite in Sprites)
+            {
+                var bounds = sprite.bounds;
+                if (world.x >= bounds.min.x && world.x <= bounds.max.x && world.y >= bounds.min.y && world.y <= bounds.max.y)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal void Bind(EntityId id)
         {
             Id = id;
-            _renderers = GetComponentsInChildren<Renderer>(true);
-            _colliders = GetComponentsInChildren<Collider2D>(true);
+            _sprites = GetComponentsInChildren<SpriteRenderer>(true);
         }
 
         /// <summary>Re-reads the entity's State. <paramref name="sceneLocation"/> is the location of the view's scene.</summary>
@@ -48,14 +78,9 @@ namespace Paramatrix.Unity
         protected void SetShown(bool shown)
         {
             IsShown = shown;
-            foreach (var item in _renderers)
+            foreach (var sprite in Sprites)
             {
-                item.enabled = shown;
-            }
-
-            foreach (var item in _colliders)
-            {
-                item.enabled = shown;
+                sprite.enabled = shown;
             }
         }
 
