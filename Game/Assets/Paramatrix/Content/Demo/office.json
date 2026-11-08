@@ -1,0 +1,112 @@
+{
+  "format_version": 1,
+  "definitions": [
+    { "id": "location.office", "scene": "Location_Office" },
+    { "id": "location.corridor", "scene": "Location_Corridor" },
+
+    {
+      "id": "story.office",
+      "states": {
+        "intro_done": { "type": "boolean", "default": false, "persistence": "persistent", "mutation_policy": "scenario_only" }
+      }
+    },
+
+    {
+      "id": "object.office_door",
+      "primary_interaction": "exit",
+      "states": {
+        "locked": { "type": "boolean", "default": true, "persistence": "persistent", "mutation_policy": "scenario_only" }
+      }
+    },
+    { "id": "object.office_window", "primary_interaction": "primary" },
+    { "id": "object.corridor_door", "primary_interaction": "exit" },
+
+    { "id": "item.key", "name": "Ключ", "description": "Маленький латунный ключ.", "initial_holder": "location.office" },
+
+    { "id": "character.trinity", "name": "Тринити", "initial_location": "location.office", "primary_interaction": "talk" },
+
+    {
+      "id": "condition.door_is_locked",
+      "condition": { "target": "object.office_door", "property": "locked", "operator": "equals", "value": true }
+    },
+
+    {
+      "id": "dialogue.intro",
+      "mode": "minimal",
+      "lines": [ { "speaker": "character.paranoik", "text": "Опять этот офис." } ]
+    },
+    {
+      "id": "dialogue.trinity",
+      "mode": "vn",
+      "lines": [
+        { "speaker": "character.trinity", "text": "Ты ведь чувствуешь это?" },
+        { "speaker": "character.paranoik", "text": "Что именно?" },
+        { "speaker": "character.trinity", "text": "Что мир — не то, чем кажется." }
+      ]
+    },
+
+    {
+      "id": "event.intro",
+      "execution": "exclusive",
+      "repeat": "once",
+      "triggers": [ { "type": "location_entered", "location": "location.office" } ],
+      "launch_condition": { "target": "story.office", "property": "intro_done", "operator": "equals", "value": false },
+      "actions": [
+        { "action": "dialogue", "dialogue": "dialogue.intro" },
+        { "action": "set_state", "target": "story.office", "property": "intro_done", "value": true }
+      ]
+    },
+
+    {
+      "id": "event.take_key",
+      "execution": "exclusive",
+      "repeat": "once",
+      "triggers": [ { "type": "interaction", "interaction": "take", "target": "item.key" } ],
+      "actions": [
+        { "action": "animation", "target": "character.paranoik", "clip": "bend_down" },
+        { "action": "inventory", "item": "item.key", "to": "inventory" }
+      ]
+    },
+
+    {
+      "id": "event.unlock_door",
+      "execution": "exclusive",
+      "repeat": "once",
+      "triggers": [ { "type": "interaction", "interaction": "apply_item", "target": "object.office_door", "item": "item.key" } ],
+      "launch_condition": { "ref": "condition.door_is_locked" },
+      "actions": [
+        { "action": "set_state", "target": "object.office_door", "property": "locked", "value": false },
+        { "action": "clear_selection" }
+      ]
+    },
+
+    {
+      "id": "event.exit_office",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "exit", "target": "object.office_door" } ],
+      "launch_condition": { "not": { "ref": "condition.door_is_locked" } },
+      "actions": [ { "action": "transition", "location": "location.corridor", "entry": "from_office" } ]
+    },
+
+    {
+      "id": "event.back_to_office",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "exit", "target": "object.corridor_door" } ],
+      "actions": [ { "action": "transition", "location": "location.office", "entry": "from_corridor" } ]
+    },
+
+    {
+      "id": "event.talk_trinity",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.trinity" } ],
+      "actions": [ { "action": "dialogue", "dialogue": "dialogue.trinity" } ]
+    },
+
+    { "id": "response.door_locked", "tier": "specific", "interaction": "exit", "target": "object.office_door", "condition": { "ref": "condition.door_is_locked" }, "text": "Заперто." },
+    { "id": "response.window", "tier": "specific", "interaction": "primary", "target": "object.office_window", "text": "За окном всегда один и тот же дождь." },
+    { "id": "response.inspect_window", "tier": "specific", "interaction": "inspect", "target": "object.office_window", "text": "Капли ползут по стеклу слишком ровно." }
+  ]
+}

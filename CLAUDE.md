@@ -29,6 +29,25 @@ dotnet test tools/Paramatrix.Tests/Paramatrix.Tests.csproj
 unity test Game --mode EditMode --output <путь>/editmode.xml --timeout 1200
 ```
 
+PlayMode-тесты (настоящие сцены, Bootstrap → офис → коридор):
+
+```bash
+unity test Game --mode PlayMode --output <путь>/playmode.xml --timeout 1200
+```
+
+Сцены, спрайт-заглушка и `ContentManifest` генерируются кодом (`Game/Assets/Paramatrix/Editor/DemoSceneBuilder.cs`), руками их не править — перезапускать сборщик (меню «Paramatrix → Build Demo Scenes» или пакетно):
+
+```bash
+unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.DemoSceneBuilder.BuildAll
+```
+
+Новый JSON в `Game/Assets/Paramatrix/Content/` попадает в игру только после «Paramatrix → Collect Content» (или BuildAll). Тест `ProjectContentIsValid` проверяет весь реальный контент.
+
+## Unity-слой
+
+- В Unity 6 есть свой тип `UnityEngine.EntityId`: в файлах с `using UnityEngine;` нужен `using EntityId = Paramatrix.Content.EntityId;`.
+- NUnit в Unity — 3.5: сообщение в `Assert.That` только строкой, не массивом.
+
 ## Правила кода
 
 - Тесты — NUnit, совместимый с NUnit 3.5 из Unity Test Framework (`Assert.That`, `TestCase`, `Assert.Throws`).

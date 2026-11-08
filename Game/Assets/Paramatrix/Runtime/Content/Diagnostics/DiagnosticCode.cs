@@ -105,5 +105,8 @@ namespace Paramatrix.Content
         RecoveryEntered,
         SaveFailed,
         SaveFileInvalid,
+
+        // Unity layer
+        StartupFailed,
     }
 }

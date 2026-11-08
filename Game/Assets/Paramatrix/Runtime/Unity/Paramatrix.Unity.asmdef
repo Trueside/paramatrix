@@ -1,0 +1,21 @@
+{
+    "name": "Paramatrix.Unity",
+    "rootNamespace": "Paramatrix.Unity",
+    "references": [
+        "Paramatrix.Content",
+        "Paramatrix.State",
+        "Paramatrix.Conditions",
+        "Paramatrix.Scenario",
+        "Paramatrix.Gameplay",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
