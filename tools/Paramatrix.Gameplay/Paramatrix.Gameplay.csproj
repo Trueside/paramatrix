@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Paramatrix.Gameplay</AssemblyName>
+    <RootNamespace>Paramatrix.Gameplay</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParamatrixRuntime)Gameplay\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Paramatrix.Content\Paramatrix.Content.csproj" />
+    <ProjectReference Include="..\Paramatrix.State\Paramatrix.State.csproj" />
+    <ProjectReference Include="..\Paramatrix.Conditions\Paramatrix.Conditions.csproj" />
+    <ProjectReference Include="..\Paramatrix.Scenario\Paramatrix.Scenario.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+  </ItemGroup>
+</Project>

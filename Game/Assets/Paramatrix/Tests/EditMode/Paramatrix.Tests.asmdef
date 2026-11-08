@@ -6,6 +6,7 @@
         "Paramatrix.State",
         "Paramatrix.Conditions",
         "Paramatrix.Scenario",
+        "Paramatrix.Gameplay",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

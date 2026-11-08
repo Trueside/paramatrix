@@ -267,6 +267,43 @@ namespace Paramatrix.Scenario
                 throw new InvalidOperationException("Scenario can be restored only when it is idle; abort the active execution first.");
             }
 
+            var errors = Validate(snapshot, sourceName, out var records);
+            if (errors.Count > 0)
+            {
+                return new ScenarioRestoreResult(errors);
+            }
+
+            CurrentVisit = snapshot.CurrentVisit;
+            for (var i = 0; i < _events.Count; i++)
+            {
+                var record = records[i].Value;
+                _events[i].EverCompleted = record.EverCompleted;
+                _events[i].LastCompletedVisit = record.LastCompletedVisit;
+                _events[i].Status = record.EverCompleted ? EventStatus.Completed : EventStatus.Idle;
+            }
+
+            _lastGeneric.Clear();
+            RecomputeBaselines();
+            return new ScenarioRestoreResult(Array.Empty<Diagnostic>());
+        }
+
+        /// <summary>
+        /// Checks a snapshot against current content without applying it, so that a load can validate
+        /// State and Scenario snapshots together before changing anything.
+        /// </summary>
+        public IReadOnlyList<Diagnostic> ValidateSnapshot(ScenarioSnapshot snapshot, string sourceName)
+        {
+            EnsureStarted();
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return Validate(snapshot, sourceName, out _);
+        }
+
+        private IReadOnlyList<Diagnostic> Validate(ScenarioSnapshot snapshot, string sourceName, out EventRecord?[] records)
+        {
             var location = new SourceLocation(sourceName ?? "<snapshot>", null, 0, 0);
             var errors = new DiagnosticBag();
             if (snapshot.CurrentVisit < 0)
@@ -274,7 +311,7 @@ namespace Paramatrix.Scenario
                 errors.Error(DiagnosticCode.SnapshotInvalidValue, location, $"Saved visit number {snapshot.CurrentVisit} is negative.");
             }
 
-            var records = new EventRecord?[_events.Count];
+            records = new EventRecord?[_events.Count];
             foreach (var record in snapshot.Events)
             {
                 if (!_eventIndex.TryGetValue(record.Event, out var index))
@@ -310,23 +347,7 @@ namespace Paramatrix.Scenario
                 }
             }
 
-            if (errors.Items.Count > 0)
-            {
-                return new ScenarioRestoreResult(errors.Items);
-            }
-
-            CurrentVisit = snapshot.CurrentVisit;
-            for (var i = 0; i < _events.Count; i++)
-            {
-                var record = records[i].Value;
-                _events[i].EverCompleted = record.EverCompleted;
-                _events[i].LastCompletedVisit = record.LastCompletedVisit;
-                _events[i].Status = record.EverCompleted ? EventStatus.Completed : EventStatus.Idle;
-            }
-
-            _lastGeneric.Clear();
-            RecomputeBaselines();
-            return new ScenarioRestoreResult(Array.Empty<Diagnostic>());
+            return errors.Items;
         }
 
         /// <summary>

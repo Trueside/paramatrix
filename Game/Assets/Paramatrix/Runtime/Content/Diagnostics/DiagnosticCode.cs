@@ -98,5 +98,12 @@ namespace Paramatrix.Content
         CascadeLimitExceeded,
         CallDepthExceeded,
         ChainAborted,
+
+        // Gameplay systems
+        ApproachFailed,
+        SceneLoadFailed,
+        RecoveryEntered,
+        SaveFailed,
+        SaveFileInvalid,
     }
 }

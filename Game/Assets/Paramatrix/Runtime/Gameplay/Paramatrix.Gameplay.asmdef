@@ -1,0 +1,21 @@
+{
+    "name": "Paramatrix.Gameplay",
+    "rootNamespace": "Paramatrix.Gameplay",
+    "references": [
+        "Paramatrix.Content",
+        "Paramatrix.State",
+        "Paramatrix.Conditions",
+        "Paramatrix.Scenario"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

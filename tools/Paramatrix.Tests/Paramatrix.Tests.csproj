@@ -14,6 +14,7 @@
     <ProjectReference Include="..\Paramatrix.State\Paramatrix.State.csproj" />
     <ProjectReference Include="..\Paramatrix.Conditions\Paramatrix.Conditions.csproj" />
     <ProjectReference Include="..\Paramatrix.Scenario\Paramatrix.Scenario.csproj" />
+    <ProjectReference Include="..\Paramatrix.Gameplay\Paramatrix.Gameplay.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- NUnit 3.x: the API surface used by the tests must stay compatible with Unity Test Framework's NUnit 3.5. -->
