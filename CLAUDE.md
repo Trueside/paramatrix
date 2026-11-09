@@ -59,6 +59,7 @@ unity run Game --timeout 900 -- -executeMethod Paramatrix.Unity.Editor.ProjectVa
 - Шрифт текста — системный Segoe UI через динамический TMP-ассет (`UiFonts`): в проект шрифт не копируется. Финальный шрифт — решение по оформлению.
 - Мировые часы: VN-диалог ставит `Time.timeScale = 0` (`WorldPause`), всё мировое движение — на scaled time, UI и Scenario от времени не зависят.
 - Физики в игре нет. Клик по объекту — попадание в границы спрайтов представления (`EntityView.Contains`), без коллайдеров. Модуль `physics2d` удалён; модули `physics` и `terrain` остаются только как зависимости URP, авто-симуляция 3D-физики выключена (`DynamicsManager`).
+- Частота кадров: один уровень качества `Default` с вертикальной синхронизацией — в сборке кадры идут с частотой монитора. Окно Game в редакторе vSync из Quality Settings не применяет, поэтому `PlayFromBootstrap` в обычном Play ставит `Application.targetFrameRate` = частота монитора (в прогонах тестов — нет).
 - В `Packages/manifest.json` — только то, чем проект пользуется: `audio` и `animation` оставлены под звук и анимации из Architecture 0.3. Новый пакет или модуль — по согласию пользователя.
 
 ## Правила кода
