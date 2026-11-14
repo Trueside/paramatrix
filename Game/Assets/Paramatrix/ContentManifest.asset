@@ -13,9 +13,50 @@ MonoBehaviour:
   m_Name: ContentManifest
   m_EditorClassIdentifier: Paramatrix.Unity::Paramatrix.Unity.ContentManifest
   entries:
+  - path: Assets/Paramatrix/Content/Demo/city.json
+    asset: {fileID: 4900000, guid: 33805662ea1ea0742901aef03162b23a, type: 3}
   - path: Assets/Paramatrix/Content/Demo/core.json
     asset: {fileID: 4900000, guid: 3d5fe6cebd375a444bbd9632a830c14c, type: 3}
   - path: Assets/Paramatrix/Content/Demo/corridor.json
     asset: {fileID: 4900000, guid: a9f5df80e0db2ae498567ea3fc691446, type: 3}
+  - path: Assets/Paramatrix/Content/Demo/hall.json
+    asset: {fileID: 4900000, guid: ba754abd8dd13be4d9c6ab7bf082bcff, type: 3}
   - path: Assets/Paramatrix/Content/Demo/office.json
     asset: {fileID: 4900000, guid: fbabd01364414b843a41005c230a2928, type: 3}
+  - path: Assets/Paramatrix/Content/emotions.json
+    asset: {fileID: 4900000, guid: 0c5f6c76e8a237d469b7756811cff046, type: 3}
+  avatars:
+  - characterId: character.beautiful_girl
+    emotion: default
+    sprite: {fileID: 21300000, guid: fa4c1c6ee2665b646976e8fa0873bbb6, type: 3}
+  - characterId: character.beautiful_girl
+    emotion: embarrassed
+    sprite: {fileID: 21300000, guid: 11220137f3596e044a0417f4ee94d27e, type: 3}
+  - characterId: character.beautiful_girl
+    emotion: smirk
+    sprite: {fileID: 21300000, guid: 74463093977561443ba8925ecdc762db, type: 3}
+  - characterId: character.fem_paranoik
+    emotion: default
+    sprite: {fileID: 21300000, guid: 1827dd81c5ea8294d8c90b790d1def51, type: 3}
+  - characterId: character.morpheus
+    emotion: default
+    sprite: {fileID: 21300000, guid: d304afd19f726b84f95d5fdc13451b9f, type: 3}
+  - characterId: character.mr_srit
+    emotion: default
+    sprite: {fileID: 21300000, guid: 44d943b1b130a6142af236a38f92ab7a, type: 3}
+  - characterId: character.paranoik
+    emotion: default
+    sprite: {fileID: 21300000, guid: adf95bef90a523c46a4fd730f2f549d6, type: 3}
+  - characterId: character.trinity
+    emotion: default
+    sprite: {fileID: 21300000, guid: 874cb51e1a8320d4dba5010ab8094d94, type: 3}
+  novelPictures:
+  - characterId: character.beautiful_girl
+    emotion: default
+    sprite: {fileID: 21300000, guid: 6454acbe9de9ed642b7c4d17a6965ac0, type: 3}
+  - characterId: character.beautiful_girl
+    emotion: embarrassed
+    sprite: {fileID: 21300000, guid: 63ff3cc1cc210d942b04cf09b4fa2c27, type: 3}
+  - characterId: character.beautiful_girl
+    emotion: smirk
+    sprite: {fileID: 21300000, guid: 04b320c0d5fe7b74892d35277d26e145, type: 3}

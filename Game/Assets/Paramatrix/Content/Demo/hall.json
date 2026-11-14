@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "definitions": [
+    { "id": "location.hall", "scene": "Location_Hall" },
+
+    { "id": "object.corridor_hall_door", "primary_interaction": "exit" },
+    { "id": "object.hall_door", "primary_interaction": "exit" },
+
+    { "id": "character.fem_paranoik", "name": "Параноика", "initial_location": "location.hall", "primary_interaction": "talk", "emotions": ["default"] },
+    {
+      "id": "dialogue.fem_paranoik",
+      "mode": "normal",
+      "lines": [
+        { "speaker": "character.fem_paranoik", "text": "Ты тоже это видишь? Зал всё не кончается." },
+        { "speaker": "character.paranoik", "text": "Странно. У тебя мои привычки." },
+        { "speaker": "character.fem_paranoik", "text": "Или у тебя — мои." }
+      ]
+    },
+    {
+      "id": "event.talk_fem_paranoik",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.fem_paranoik" } ],
+      "actions": [ { "action": "dialogue", "dialogue": "dialogue.fem_paranoik" } ]
+    },
+    { "id": "response.inspect_fem_paranoik", "tier": "specific", "interaction": "inspect", "target": "character.fem_paranoik", "text": "Зелёные пряди, рука на поясе. Смотрит так, будто знает, о чём я думаю." },
+
+    { "id": "character.mr_srit", "name": "Мистер Срит", "initial_location": "location.hall", "primary_interaction": "talk", "emotions": ["default"] },
+
+    {
+      "id": "dialogue.mr_srit",
+      "mode": "normal",
+      "lines": [
+        { "speaker": "character.mr_srit", "text": "Вы опоздали." },
+        { "speaker": "character.paranoik", "text": "Я даже не знал, что меня здесь ждут." },
+        { "speaker": "character.mr_srit", "text": "Здесь ждут всех. Просто не все об этом знают." }
+      ]
+    },
+
+    {
+      "id": "event.talk_mr_srit",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.mr_srit" } ],
+      "actions": [ { "action": "dialogue", "dialogue": "dialogue.mr_srit" } ]
+    },
+    { "id": "response.inspect_mr_srit", "tier": "specific", "interaction": "inspect", "target": "character.mr_srit", "text": "Тёмный костюм без единой складки. Очки не снимает." },
+
+    {
+      "id": "event.corridor_to_hall",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "exit", "target": "object.corridor_hall_door" } ],
+      "actions": [ { "action": "transition", "location": "location.hall", "entry": "from_corridor" } ]
+    },
+    {
+      "id": "event.hall_to_corridor",
+      "execution": "exclusive",
+      "repeat": "repeatable",
+      "triggers": [ { "type": "interaction", "interaction": "exit", "target": "object.hall_door" } ],
+      "actions": [ { "action": "transition", "location": "location.corridor", "entry": "from_hall" } ]
+    }
+  ]
+}

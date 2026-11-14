@@ -9,10 +9,31 @@ EditorBuildSettings:
     path: Assets/Paramatrix/Scenes/Bootstrap.unity
     guid: 7f1fd7c100669bb44ac6dd108db7a3fb
   - enabled: 1
-    path: Assets/Paramatrix/Scenes/Location_Office.unity
-    guid: 730db37c42c364b428657dc07de416bc
+    path: Assets/Paramatrix/Scenes/Location_Bar.unity
+    guid: cf657c40295854d4d8e437c2a4a6a6f6
   - enabled: 1
     path: Assets/Paramatrix/Scenes/Location_Corridor.unity
     guid: 396e7aed26f2faa4f95fc89114b5353f
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_DkStreet.unity
+    guid: 97c6589add275424dba3aadc9263b2c9
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_FactoryStreet.unity
+    guid: 5810bdd901894a848a7d33c3ea2248da
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_Hall.unity
+    guid: bf1bab507efac9842ad0d2708895c0a2
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_NiiStreet.unity
+    guid: e8972704e5c96f54a827e12aaa4c4d92
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_Office.unity
+    guid: 730db37c42c364b428657dc07de416bc
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_ShopStreet.unity
+    guid: 45935daf00d884f428dd7279eb157920
+  - enabled: 1
+    path: Assets/Paramatrix/Scenes/Location_Workshop.unity
+    guid: df2652dbaa135a04684413873ad2e911
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

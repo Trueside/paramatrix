@@ -1,0 +1,5 @@
+{
+  "comment": "Scene pieces (props): every entry needs its own 'height' in grid pixels, taken from the size tables of Paramatrix_Scene_Kit_0_1_RU.md (already multiplied by the depth plane's scale). Source: a clean cut-out on a transparent background in _img/props/. Output: Game/Assets/Paramatrix/Art/Props/<Name>.png. Run: powershell -ExecutionPolicy Bypass -File tools/art/prepare-characters.ps1 -List props.json",
+  "props": [
+  ]
+}

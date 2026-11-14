@@ -45,26 +45,24 @@ namespace Paramatrix.PlayTests
         [UnityTest]
         public IEnumerator PlayFromIntroToMorpheusSaveAndLoad()
         {
-            // Intro.
-            Assert.That(_game.DialogueView.BubbleText, Is.EqualTo("Опять этот офис."));
-            yield return FinishDialogue();
+            // Intro: a thought of the hero, a monologue (Р10).
+            Assert.That(_game.DialogueView.MonologueText(EntityId.Parse("character.paranoik")), Is.EqualTo("Опять этот офис."));
+            Assert.That(PlayerHasControl(), Is.True);
 
             // Key → door → corridor.
             Click("item.key");
             yield return WaitUntil(() => Carried("item.key") && PlayerHasControl(), "key taken");
             _game.InventoryView.Click(EntityId.Parse("item.key"), PointerButton.Primary);
             Click("object.office_door");
-            yield return WaitUntil(() => !Flag("object.office_door", "locked") && _game.DialogueView.CurrentLine.HasValue, "door unlocked");
-            yield return FinishDialogue();
-            yield return WaitUntil(PlayerHasControl, "unlock scene finished");
+            yield return WaitUntil(() => !Flag("object.office_door", "locked") && PlayerHasControl(), "door unlocked");
             Click("object.office_door");
             yield return WaitUntil(() => _game.Scenes.CurrentScene == "Location_Corridor" && PlayerHasControl(), "corridor");
 
             // Morpheus.
             Click("character.morpheus");
-            yield return WaitUntil(() => _game.DialogueView.IsNovelPanelShown, "Morpheus dialogue");
-            Assert.That(_game.DialogueView.NovelName, Is.EqualTo("Морфеус"));
-            Assert.That(_game.DialogueView.NovelText, Is.EqualTo("Я ждал тебя."));
+            yield return WaitUntil(() => _game.DialogueView.IsConversationShown, "Morpheus dialogue");
+            Assert.That(_game.DialogueView.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.morpheus")));
+            Assert.That(_game.DialogueView.ConversationText, Is.EqualTo("Я ждал тебя."));
             Assert.That(_game.SaveControls.QuickSave(Slot), Is.Null, "no saving during a dialogue");
             Assert.That(_game.SaveControls.Status, Is.EqualTo("Сейчас сохранить нельзя."));
             yield return FinishDialogue();
@@ -79,10 +77,10 @@ namespace Paramatrix.PlayTests
             // Back to the office: Trinity now knows (Р1: the condition reads the story fact).
             Click("object.corridor_door");
             yield return WaitUntil(() => _game.Scenes.CurrentScene == "Location_Office" && PlayerHasControl(), "back in the office");
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "the intro is once and does not replay");
+            Assert.That(_game.DialogueView.MonologueCount, Is.Zero, "the intro is once and does not replay");
             Click("character.trinity");
-            yield return WaitUntil(() => _game.DialogueView.IsNovelPanelShown, "Trinity dialogue");
-            Assert.That(_game.DialogueView.NovelText, Is.EqualTo("Ты его видел. По глазам вижу."));
+            yield return WaitUntil(() => _game.DialogueView.IsConversationShown, "Trinity dialogue");
+            Assert.That(_game.DialogueView.ConversationText, Is.EqualTo("Ты его видел. По глазам вижу."));
             yield return FinishDialogue();
 
             // Load: back to the corridor at the default entry point, nothing replays (Р2, Р9).
@@ -93,18 +91,18 @@ namespace Paramatrix.PlayTests
             Assert.That(_game.SaveControls.Status, Is.EqualTo("Игра загружена."));
 
             Assert.That(_game.Scenes.CurrentScene, Is.EqualTo("Location_Corridor"));
-            Assert.That(_game.Hero.X, Is.EqualTo(0f).Within(0.01f), "default entry point of the corridor");
+            Assert.That(_game.Hero.X, Is.EqualTo(-4f).Within(0.01f), "default entry point of the corridor (-192 grid pixels)");
             Assert.That(_game.Session.Scenario.CurrentVisit, Is.EqualTo(visitAtSave), "Load creates no Visit");
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "no intro, no scene on load");
+            Assert.That(_game.DialogueView.CurrentLine.HasValue || _game.DialogueView.MonologueCount > 0, Is.False, "no intro, no scene on load");
             Assert.That(Flag("story.morpheus_meeting", "occurred"), Is.True);
             Assert.That(_game.Session.State.Get(StateAddress.Parse("item.key", "holder")).AsEnum, Is.EqualTo("consumed"), "the key was used up on the door");
             Assert.That(_game.InventoryView.Slots, Is.Empty);
 
             // The once-meeting is used up: the specific response answers instead.
             Click("character.morpheus");
-            yield return WaitUntil(() => _game.DialogueView.IsBubbleShown, "response");
-            Assert.That(_game.DialogueView.BubbleText, Is.EqualTo("Морфеус молча кивает."));
-            yield return FinishDialogue();
+            yield return null;
+            Assert.That(_game.DialogueView.MonologueText(EntityId.Parse("character.morpheus")), Is.EqualTo("Морфеус молча кивает."),
+                "a monologue over Morpheus");
 
             Assert.That(Errors(), Is.Empty);
         }
@@ -131,13 +129,17 @@ namespace Paramatrix.PlayTests
         {
             var view = _game.Representations.Find(EntityId.Parse(id));
             Assert.That(view, Is.Not.Null, id + " has no representation");
-            var picked = _game.Input.ViewAt(view.transform.position);
+            _game.StandBy(view);
+            var picked = _game.Input.ViewAt(view.GetComponentInChildren<SpriteRenderer>().bounds.center);
             Assert.That(picked == view, Is.True,
                 $"pick at {id}: picked={(picked == null ? "null" : picked.name)} shown={view.IsShown} registered={_game.Representations.Find(view.Id) == view} id={view.Id}");
             var permissions = _game.Session.Flow.Permissions;
             var selected = _game.Session.Inventory.Selected;
-            _game.Input.ClickAt(view.transform.position, PointerButton.Primary);
-            Assert.That(_game.Session.Interaction.IsApproaching || _game.Session.Flow.Owner != ControlOwner.Player, Is.True,
+            var bubbles = _game.DialogueView.MonologueCount;
+            _game.Input.ClickAt(view.GetComponentInChildren<SpriteRenderer>().bounds.center, PointerButton.Primary);
+            // Something happened: a scene holds control, a monologue was said, or an instant scene used the selected item.
+            Assert.That(_game.Session.Flow.Owner != ControlOwner.Player
+                || _game.DialogueView.MonologueCount > bubbles || _game.Session.Inventory.Selected != selected, Is.True,
                 $"click on {id} started nothing: permissions={permissions} selected={selected} heroX={_game.Hero.X} approachX={view.ApproachX} " +
                 $"timeScale={Time.timeScale} diagnostics=[{string.Join("; ", _game.Diagnostics.Items.Select(d => d.ToString()))}]");
         }
@@ -152,7 +154,7 @@ namespace Paramatrix.PlayTests
         {
             for (var guard = 0; _game.DialogueView.CurrentLine.HasValue; guard++)
             {
-                Assert.That(guard, Is.LessThan(20));
+                Assert.That(guard, Is.LessThan(40));
                 _game.Input.AdvanceDialogue();
                 yield return null;
             }
@@ -181,7 +183,7 @@ namespace Paramatrix.PlayTests
                 {
                     var flow = _game.Session.Flow;
                     Assert.Fail($"Timed out waiting for {what}. Owner={flow.Owner} transition={flow.InTransition} heroX={_game.Hero.X} " +
-                                $"approaching={_game.Session.Interaction.IsApproaching} scene={_game.Scenes.CurrentScene}. Diagnostics:\n" +
+                                $"scene={_game.Scenes.CurrentScene}. Diagnostics:\n" +
                                 string.Join("\n", _game.Diagnostics.Items.Select(d => d.ToString())));
                 }
 

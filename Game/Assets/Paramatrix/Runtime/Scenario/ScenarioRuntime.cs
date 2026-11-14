@@ -35,8 +35,25 @@ namespace Paramatrix.Scenario
         private readonly Dictionary<TriggerType, List<(int Event, TriggerDefinition Trigger)>> _triggerIndex =
             new Dictionary<TriggerType, List<(int, TriggerDefinition)>>();
 
+        /// <summary>Said by the system after the last stub of a round (Р10): the player has heard everything.</summary>
+        public const string EndOfStubs = "…";
+
         private readonly List<ResponseDefinition> _responses = new List<ResponseDefinition>();
-        private readonly Dictionary<InteractionType, EntityId> _lastGeneric = new Dictionary<InteractionType, EntityId>();
+
+        /// <summary>Lines already said of every prepared monologue (Р10); saved.</summary>
+        private readonly Dictionary<EntityId, int> _spoken = new Dictionary<EntityId, int>();
+
+        /// <summary>
+        /// Per stub pool (interaction + target, or the common pool): the stub said last, or null when the round was just
+        /// closed with "…". No entry: the round starts from the first stub. Lookups only; never enumerated.
+        /// </summary>
+        private readonly Dictionary<string, EntityId?> _lastStub = new Dictionary<string, EntityId?>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// The prepared monologue whose line the hero said last, while nothing else was said by him since: the thought
+        /// <see cref="ContinueThought"/> moves on. Not saved: it lives as long as the bubble.
+        /// </summary>
+        private EntityId? _thought;
 
         private readonly Queue<InboxItem> _inbox = new Queue<InboxItem>();
         private readonly List<int> _exclusiveQueue = new List<int>();
@@ -109,7 +126,12 @@ namespace Paramatrix.Scenario
 
             foreach (var definition in _registry.GetByKind(EntityKind.Response))
             {
-                _responses.Add((ResponseDefinition)definition);
+                var response = (ResponseDefinition)definition;
+                _responses.Add(response);
+                if (response.IsPrepared)
+                {
+                    _spoken.Add(response.Id, 0);
+                }
             }
 
             // ConditionsMet monitors (0.3.2 §8, Addendum §4): one per trigger, in event ID order,
@@ -151,6 +173,30 @@ namespace Paramatrix.Scenario
         public bool HasPendingWork => _inbox.Count > 0 || (_active != null && !_active.IsWaiting) || (_active == null && _exclusiveQueue.Count > 0);
 
         public EventStatus GetStatus(EntityId eventId) => _events[IndexOf(eventId)].Status;
+
+        /// <summary>Lines of a prepared monologue already said (Р10).</summary>
+        public int SpokenLines(EntityId response) =>
+            _spoken.TryGetValue(response, out var spoken) ? spoken : throw new KeyNotFoundException($"{response} is not a prepared monologue.");
+
+        /// <summary>
+        /// Would this player action go to a scene rather than to a response? Decides whether the hero walks to the target
+        /// first (T13): a scene is approached, a monologue answers from any distance (Р10). True also for an event that
+        /// would be reported as blocked or erroneous: the full resolution then reports it.
+        /// </summary>
+        public bool WouldStartEvent(in Trigger trigger)
+        {
+            EnsureStarted();
+            foreach (var index in Candidates(trigger))
+            {
+                var availability = Check(index).Availability;
+                if (availability != Availability.Exhausted && availability != Availability.ConditionFalse)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>Accepts a trigger from a Gameplay System and processes it.</summary>
         public void Submit(in Trigger trigger)
@@ -245,7 +291,16 @@ namespace Paramatrix.Scenario
                 records.Add(new EventRecord(runtime.Definition.Id, runtime.EverCompleted, runtime.LastCompletedVisit));
             }
 
-            return new ScenarioSnapshot(CurrentVisit, records);
+            var monologues = new List<MonologueRecord>();
+            foreach (var response in _responses)
+            {
+                if (response.IsPrepared)
+                {
+                    monologues.Add(new MonologueRecord(response.Id, _spoken[response.Id]));
+                }
+            }
+
+            return new ScenarioSnapshot(CurrentVisit, records, monologues);
         }
 
         /// <summary>
@@ -282,7 +337,13 @@ namespace Paramatrix.Scenario
                 _events[i].Status = record.EverCompleted ? EventStatus.Completed : EventStatus.Idle;
             }
 
-            _lastGeneric.Clear();
+            foreach (var monologue in snapshot.Monologues)
+            {
+                _spoken[monologue.Response] = monologue.Spoken;
+            }
+
+            _lastStub.Clear();
+            _thought = null;
             RecomputeBaselines();
             return new ScenarioRestoreResult(Array.Empty<Diagnostic>());
         }
@@ -347,7 +408,42 @@ namespace Paramatrix.Scenario
                 }
             }
 
+            ValidateMonologues(snapshot, location, errors);
             return errors.Items;
+        }
+
+        /// <summary>The save must hold exactly the prepared monologues of current content, each within its line count (A15).</summary>
+        private void ValidateMonologues(ScenarioSnapshot snapshot, SourceLocation location, DiagnosticBag errors)
+        {
+            var seen = new HashSet<EntityId>();
+            foreach (var record in snapshot.Monologues)
+            {
+                if (!_registry.TryGet<ResponseDefinition>(record.Response, out var response))
+                {
+                    errors.Error(DiagnosticCode.SnapshotUnknownEntity, location, $"Saved monologue {record.Response} does not exist in current content.");
+                    continue;
+                }
+
+                if (!seen.Add(record.Response))
+                {
+                    errors.Error(DiagnosticCode.SnapshotDuplicateEntry, location, $"Monologue {record.Response} is saved twice.");
+                    continue;
+                }
+
+                if (!response.IsPrepared || record.Spoken < 0 || record.Spoken > response.Lines.Count)
+                {
+                    errors.Error(DiagnosticCode.SnapshotInvalidValue, location,
+                        $"Monologue {record.Response}: {record.Spoken} lines said does not fit a prepared monologue of {(response.IsPrepared ? response.Lines.Count : 0)} lines.");
+                }
+            }
+
+            foreach (var response in _responses)
+            {
+                if (response.IsPrepared && !seen.Contains(response.Id))
+                {
+                    errors.Error(DiagnosticCode.SnapshotMissingEntry, location, $"Monologue {response.Id} is missing from the save.");
+                }
+            }
         }
 
         /// <summary>
@@ -374,10 +470,8 @@ namespace Paramatrix.Scenario
                 _abandoned.Add(chain.Pending.Value);
             }
 
-            var what = chain.Kind == ChainKind.Response ? "response " + chain.Response.Id : _events[chain.Frames[0].Event].Definition.Id.ToString();
-            Report(DiagnosticCode.ChainAborted, Severity.Error,
-                chain.Kind == ChainKind.Response ? chain.Response.Source : _events[chain.Frames[0].Event].Definition.Source,
-                $"Execution of {what} was aborted: {reason}");
+            var root = _events[chain.Frames[0].Event].Definition;
+            Report(DiagnosticCode.ChainAborted, Severity.Error, root.Source, $"Execution of {root.Id} was aborted: {reason}");
 
             foreach (var frame in chain.Frames)
             {
@@ -702,6 +796,11 @@ namespace Paramatrix.Scenario
             StartExclusive(index, token);
         }
 
+        /// <summary>
+        /// A player action without a scene (Р6, Р10): specific → contextual (a prepared monologue that is said out no longer
+        /// matches) → stubs (the target's own pool, else the common pool; each round closes with "…") → fallback.
+        /// Everything is said as a monologue: shown at once, nothing waits for it, no control is taken.
+        /// </summary>
         private void ResolveResponse(in Trigger trigger)
         {
             var interaction = trigger.Interaction.Value;
@@ -710,27 +809,21 @@ namespace Paramatrix.Scenario
                 var matched = new List<ResponseDefinition>();
                 foreach (var response in _responses)
                 {
-                    if (response.Tier != tier || !MatchesResponse(response, trigger))
+                    if (response.Tier != tier || !MatchesResponse(response, trigger) || IsSaidOut(response))
                     {
                         continue;
                     }
 
-                    if (response.Condition != null)
+                    var condition = ResponseCondition(response);
+                    if (condition == ConditionOutcome.Error)
                     {
-                        var result = _conditions.Evaluate(response.Condition);
-                        if (result.IsError)
-                        {
-                            ReportConditionError(response.Source, response.Id, result);
-                            return;
-                        }
-
-                        if (!result.IsTrue)
-                        {
-                            continue;
-                        }
+                        return;
                     }
 
-                    matched.Add(response);
+                    if (condition == ConditionOutcome.True)
+                    {
+                        matched.Add(response);
+                    }
                 }
 
                 if (matched.Count > 1)
@@ -742,42 +835,35 @@ namespace Paramatrix.Scenario
 
                 if (matched.Count == 1)
                 {
-                    ShowResponse(matched[0], trigger);
+                    SayResponse(matched[0], trigger);
                     return;
                 }
             }
 
-            var pool = new List<ResponseDefinition>();
-            foreach (var response in _responses)
+            // Stubs: the target's own pool first, the common pool only for a target without one (Р10).
+            List<ResponseDefinition> pool = null;
+            EntityId? poolTarget = null;
+            if (trigger.Target.HasValue)
             {
-                if (response.Tier != ResponseTier.Generic || !MatchesResponse(response, trigger))
+                poolTarget = trigger.Target;
+                if (!CollectStubs(trigger, poolTarget, out pool))
                 {
-                    continue;
+                    return;
                 }
+            }
 
-                if (response.Condition != null)
+            if (pool == null || pool.Count == 0)
+            {
+                poolTarget = null;
+                if (!CollectStubs(trigger, null, out pool))
                 {
-                    var result = _conditions.Evaluate(response.Condition);
-                    if (result.IsError)
-                    {
-                        ReportConditionError(response.Source, response.Id, result);
-                        return;
-                    }
-
-                    if (!result.IsTrue)
-                    {
-                        continue;
-                    }
+                    return;
                 }
-
-                pool.Add(response);
             }
 
             if (pool.Count > 0)
             {
-                var chosen = NextInPool(interaction, pool);
-                _lastGeneric[interaction] = chosen.Id;
-                ShowResponse(chosen, trigger);
+                SayStub(interaction, poolTarget, pool, trigger);
                 return;
             }
 
@@ -787,7 +873,7 @@ namespace Paramatrix.Scenario
                 {
                     if (!response.IsNoReaction)
                     {
-                        ShowResponse(response, trigger);
+                        SayResponse(response, trigger);
                     }
 
                     return;
@@ -813,54 +899,163 @@ namespace Paramatrix.Scenario
             return !response.Item.HasValue || response.Item == trigger.Item;
         }
 
-        /// <summary>Round robin in ID order, never the same response twice in a row when the pool allows it.</summary>
-        private ResponseDefinition NextInPool(InteractionType interaction, List<ResponseDefinition> pool)
+        private bool IsSaidOut(ResponseDefinition response) => response.IsPrepared && _spoken[response.Id] >= response.Lines.Count;
+
+        /// <summary>True / False of the response condition; Error is reported here.</summary>
+        private ConditionOutcome ResponseCondition(ResponseDefinition response)
         {
-            if (!_lastGeneric.TryGetValue(interaction, out var last))
+            if (response.Condition == null)
             {
-                return pool[0];
+                return ConditionOutcome.True;
             }
 
-            for (var i = 0; i < pool.Count; i++)
+            var result = _conditions.Evaluate(response.Condition);
+            if (result.IsError)
             {
-                if (pool[i].Id.CompareTo(last) > 0)
+                ReportConditionError(response.Source, response.Id, result);
+            }
+
+            return result.Outcome;
+        }
+
+        /// <summary>
+        /// Generic responses of one pool whose condition holds, in ID order: <paramref name="target"/> set — that target's
+        /// own pool; null — the common pool (generic responses without a target). False when a condition failed.
+        /// </summary>
+        private bool CollectStubs(in Trigger trigger, EntityId? target, out List<ResponseDefinition> pool)
+        {
+            pool = new List<ResponseDefinition>();
+            foreach (var response in _responses)
+            {
+                if (response.Tier != ResponseTier.Generic || response.Interaction != trigger.Interaction
+                    || response.Target != target || (response.Item.HasValue && response.Item != trigger.Item))
                 {
-                    return pool[i];
+                    continue;
+                }
+
+                var condition = ResponseCondition(response);
+                if (condition == ConditionOutcome.Error)
+                {
+                    return false;
+                }
+
+                if (condition == ConditionOutcome.True)
+                {
+                    pool.Add(response);
                 }
             }
 
-            return pool[0].Id == last && pool.Count > 1 ? pool[1] : pool[0];
+            return true;
         }
 
-        private void ShowResponse(ResponseDefinition response, in Trigger trigger)
+        /// <summary>
+        /// Next stub of the round, in ID order; after the last one the system says "…", then the round starts over (Р10).
+        /// </summary>
+        private void SayStub(InteractionType interaction, EntityId? target, List<ResponseDefinition> pool, in Trigger trigger)
         {
-            if (_active != null || !_ports.GameFlow.TryAcquireScenarioControl(out var token))
+            var key = InteractionTypes.Name(interaction) + "|" + (target.HasValue ? target.Value.Value : "*");
+            ResponseDefinition next = null;
+            if (_lastStub.TryGetValue(key, out var last) && last.HasValue)
             {
-                Report(DiagnosticCode.PlayerActionRejected, Severity.Warning, response.Source,
-                    $"Response {response.Id} not shown: another exclusive execution holds control.");
-                return;
+                foreach (var response in pool)
+                {
+                    if (response.Id.CompareTo(last.Value) > 0)
+                    {
+                        next = response;
+                        break;
+                    }
+                }
+
+                if (next == null)
+                {
+                    // The round is over: "…" is said by whoever said the stubs.
+                    if (Say(SpeakerOf(pool[pool.Count - 1], trigger), EndOfStubs, pool[pool.Count - 1].Source))
+                    {
+                        _lastStub[key] = null;
+                    }
+
+                    return;
+                }
+            }
+            else
+            {
+                next = pool[0]; // a new round: never started, or the last one was closed by "…"
             }
 
-            var speaker = response.Speaker
-                ?? (trigger.Interaction == InteractionType.Talk && trigger.Target.HasValue && trigger.Target.Value.Kind == EntityKind.Character
-                    ? trigger.Target.Value
-                    : _registry.Game.PlayerCharacter);
-
-            var handle = NewHandle();
-            var start = _ports.Dialogue.ShowLine(handle, speaker, response.Text);
-            switch (start.Status)
+            if (Say(SpeakerOf(next, trigger), next.Lines[0], next.Source))
             {
-                case OperationStartStatus.Started:
-                    _active = Chain.ForResponse(token, response, handle);
-                    break;
-                case OperationStartStatus.CompletedImmediately:
-                    _ports.GameFlow.ReleaseScenarioControl(token, ReleaseReason.Completed);
-                    break;
-                default:
-                    Report(DiagnosticCode.OperationFailed, Severity.Error, response.Source, $"Response {response.Id} could not be shown: {start.FailureReason}");
-                    _ports.GameFlow.ReleaseScenarioControl(token, ReleaseReason.Failed);
-                    break;
+                _lastStub[key] = next.Id;
             }
+        }
+
+        /// <summary>A text response, or the next line of a prepared monologue.</summary>
+        private void SayResponse(ResponseDefinition response, in Trigger trigger)
+        {
+            var line = response.IsPrepared ? _spoken[response.Id] : 0;
+            var speaker = SpeakerOf(response, trigger);
+            if (Say(speaker, response.Lines[line], response.Source) && response.IsPrepared)
+            {
+                _spoken[response.Id] = line + 1;
+                if (speaker == _registry.Game.PlayerCharacter)
+                {
+                    _thought = response.Id;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The player moves the hero's shown thought on (right click on empty space, Р10): the next line of the prepared
+        /// monologue it came from, if one is left and its condition holds. False when there is none (the caller closes the
+        /// bubble) or the line could not be said (reported).
+        /// </summary>
+        public bool ContinueThought()
+        {
+            var id = _thought;
+            _thought = null;
+            if (!id.HasValue)
+            {
+                return false;
+            }
+
+            var response = _responses.Find(r => r.Id == id.Value);
+            if (IsSaidOut(response) || ResponseCondition(response) != ConditionOutcome.True)
+            {
+                return false;
+            }
+
+            var line = _spoken[response.Id];
+            if (!Say(_registry.Game.PlayerCharacter, response.Lines[line], response.Source))
+            {
+                return false;
+            }
+
+            _spoken[response.Id] = line + 1;
+            _thought = response.Id;
+            return true;
+        }
+
+        private EntityId SpeakerOf(ResponseDefinition response, in Trigger trigger) =>
+            response.Speaker
+            ?? (trigger.Interaction == InteractionType.Talk && trigger.Target.HasValue && trigger.Target.Value.Kind == EntityKind.Character
+                ? trigger.Target.Value
+                : _registry.Game.PlayerCharacter);
+
+        /// <summary>Shows a monologue line; a refusal is an Error (Р0). The line counts as said only when shown.</summary>
+        private bool Say(EntityId speaker, string text, SourceLocation source)
+        {
+            var error = _ports.Dialogue.Say(speaker, text);
+            if (error == null)
+            {
+                if (speaker == _registry.Game.PlayerCharacter)
+                {
+                    _thought = null; // set again by the caller when the line belongs to a prepared monologue
+                }
+
+                return true;
+            }
+
+            Report(DiagnosticCode.MonologueFailed, Severity.Error, source, $"{speaker} could not say \"{text}\": {error}");
+            return false;
         }
 
         // ======================================================================
@@ -1048,6 +1243,23 @@ namespace Paramatrix.Scenario
                     frame.Pc++;
                     return;
 
+                case SayAction say:
+                    // A monologue line: the event never waits for it (Р10). A refusal fails the event (Р0).
+                    var refused = _ports.Dialogue.Say(say.Speaker, say.Text);
+                    if (refused == null && say.Speaker == _registry.Game.PlayerCharacter)
+                    {
+                        _thought = null; // the hero says something else: the bubble no longer shows that thought
+                    }
+
+                    if (refused != null)
+                    {
+                        Fail(chain, DiagnosticCode.MonologueFailed, say.Source, $"{runtime.Definition.Id}: {say.Speaker} could not say \"{say.Text}\": {refused}");
+                        return;
+                    }
+
+                    frame.Pc++;
+                    return;
+
                 case CallAction call:
                     ExecuteCall(chain, frame, runtime, call);
                     return;
@@ -1183,23 +1395,6 @@ namespace Paramatrix.Scenario
             var action = chain.PendingAction;
             chain.Pending = null;
             chain.PendingAction = null;
-
-            if (chain.Kind == ChainKind.Response)
-            {
-                _active = null;
-                if (outcome == OperationOutcome.Completed)
-                {
-                    _ports.GameFlow.ReleaseScenarioControl(chain.Token.Value, ReleaseReason.Completed);
-                }
-                else
-                {
-                    Report(outcome == OperationOutcome.Cancelled ? DiagnosticCode.OperationCancelled : DiagnosticCode.OperationFailed,
-                        Severity.Error, chain.Response.Source, $"Response {chain.Response.Id} did not complete: {outcome}.");
-                    _ports.GameFlow.ReleaseScenarioControl(chain.Token.Value, ReleaseReason.Failed);
-                }
-
-                return;
-            }
 
             if (outcome != OperationOutcome.Completed)
             {
@@ -1385,7 +1580,6 @@ namespace Paramatrix.Scenario
         {
             Exclusive = 1,
             Background,
-            Response,
         }
 
         /// <summary>One execution chain: the root event plus nested CALL frames; it holds control at most once (Addendum §2).</summary>
@@ -1399,16 +1593,11 @@ namespace Paramatrix.Scenario
 
             public static Chain ForEvent(ChainKind kind, ControlToken? token) => new Chain(kind, token);
 
-            public static Chain ForResponse(ControlToken token, ResponseDefinition response, OperationHandle handle) =>
-                new Chain(ChainKind.Response, token) { Response = response, Pending = handle };
-
             public ChainKind Kind { get; }
 
             public ControlToken? Token { get; }
 
             public List<Frame> Frames { get; } = new List<Frame>();
-
-            public ResponseDefinition Response { get; private set; }
 
             public OperationHandle? Pending { get; set; }
 

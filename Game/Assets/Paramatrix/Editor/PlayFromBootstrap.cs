@@ -16,6 +16,9 @@ namespace Paramatrix.Unity.Editor
     {
         private const string TestInitScenePrefix = "InitTestScene";
 
+        /// <summary>The quality level's vertical sync as the project stores it (read before Play mode changes it).</summary>
+        private static readonly int ProjectVSyncCount = QualitySettings.vSyncCount;
+
         static PlayFromBootstrap()
         {
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
@@ -32,32 +35,19 @@ namespace Paramatrix.Unity.Editor
         public static bool NeedsRedirect(string activeSceneName, bool hasBootstrap) =>
             !hasBootstrap && !activeSceneName.StartsWith(TestInitScenePrefix);
 
-        /// <summary>
-        /// Frame rate cap for Play mode in the editor: the monitor refresh rate, as vertical sync gives a build.
-        /// The Game view does not apply the quality level's vSync, so without a cap the editor renders hundreds of
-        /// frames per second and behaves unlike the game. Null when the refresh rate is unknown (batch mode).
-        /// </summary>
-        public static int? EditorFrameRateCap(double refreshRate) =>
-            refreshRate >= 1 ? (int)System.Math.Round(refreshRate) : (int?)null;
-
         private static void OnPlayModeChanged(PlayModeStateChange change)
         {
             if (change == PlayModeStateChange.ExitingPlayMode)
             {
+                // FramePacing changes these at run time; in the editor such changes would outlive Play mode.
                 Application.targetFrameRate = -1;
+                QualitySettings.vSyncCount = ProjectVSyncCount;
                 return;
             }
 
             if (change != PlayModeStateChange.EnteredPlayMode)
             {
                 return;
-            }
-
-            var isTestRun = SceneManager.GetActiveScene().name.StartsWith(TestInitScenePrefix);
-            var cap = EditorFrameRateCap(Screen.currentResolution.refreshRateRatio.value);
-            if (!isTestRun && cap.HasValue)
-            {
-                Application.targetFrameRate = cap.Value;
             }
 
             var hasBootstrap = Object.FindAnyObjectByType<GameBootstrap>() != null;

@@ -161,7 +161,14 @@ namespace Paramatrix.Tests.Scenario
 
         public OperationStart Show(OperationHandle handle, EntityId dialogue) => Answer(handle, "dialogue:" + dialogue);
 
-        public OperationStart ShowLine(OperationHandle handle, EntityId speaker, string text) => Answer(handle, $"line:{speaker}:{text}");
+        /// <summary>When set, monologue lines are refused with this reason.</summary>
+        public string RefuseSay { get; set; }
+
+        public string Say(EntityId speaker, string text)
+        {
+            Log.Add($"say:{speaker}:{text}");
+            return RefuseSay;
+        }
 
         public OperationStart MoveTo(OperationHandle handle, EntityId character, EntityId target) => Answer(handle, $"move:{character}->{target}");
 
@@ -229,7 +236,9 @@ namespace Paramatrix.Tests.Scenario
             " } }";
 
         public static string Line(string id, string text) =>
-            "{ 'id': '" + id + "', 'mode': 'minimal', 'lines': [ { 'speaker': 'character.paranoik', 'text': '" + text + "' } ] }";
+            "{ 'id': '" + id + "', 'mode': 'normal', 'lines': [ { 'speaker': 'character.paranoik', 'text': '" + text + "' } ] }";
+
+        public static string Say(string text) => "{ 'action': 'say', 'speaker': 'character.paranoik', 'text': '" + text + "' }";
 
         public static string[] With(string[] common, params string[] more) => common.Concat(more).ToArray();
     }

@@ -116,10 +116,14 @@ namespace Paramatrix.Scenario
 
     public interface IDialoguePort
     {
+        /// <summary>A conversation in normal mode; completes when the player advances past its last line.</summary>
         OperationStart Show(OperationHandle handle, EntityId dialogue);
 
-        /// <summary>One-line Minimalistic reaction (T17).</summary>
-        OperationStart ShowLine(OperationHandle handle, EntityId speaker, string text);
+        /// <summary>
+        /// A monologue line (Р10): shown at once, never waited for, takes no control.
+        /// Returns null when shown, otherwise why it could not be shown.
+        /// </summary>
+        string Say(EntityId speaker, string text);
     }
 
     public interface IMovementPort

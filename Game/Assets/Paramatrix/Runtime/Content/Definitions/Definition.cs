@@ -60,6 +60,47 @@ namespace Paramatrix.Content
         public IReadOnlyDictionary<string, StateDefinition> StatesByProperty { get; }
     }
 
+    /// <summary>Avatar emotions (Р10): names are file names of the avatar pictures.</summary>
+    public static class Emotions
+    {
+        /// <summary>Every character with avatars has it; a dialogue line without an emotion uses it.</summary>
+        public const string Default = "default";
+
+        /// <summary>Lowercase Latin letters, digits and '_', starting with a letter: safe as a file name everywhere.</summary>
+        public static bool IsValidName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name[0] < 'a' || name[0] > 'z')
+            {
+                return false;
+            }
+
+            foreach (var c in name)
+            {
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// One emotion of the common dictionary (Р10): characters may declare only these. The ID name is the avatar file
+    /// name (<c>emotion.smirk</c> → <c>smirk.png</c>); <see cref="Name"/> is the Russian word authors pick it by.
+    /// </summary>
+    public sealed class EmotionDefinition : Definition
+    {
+        public EmotionDefinition(EntityId id, SourceLocation source, string name)
+            : base(id, source)
+        {
+            Name = name;
+        }
+
+        public string Name { get; }
+    }
+
     public sealed class CharacterDefinition : WorldEntityDefinition
     {
         public CharacterDefinition(
@@ -67,17 +108,28 @@ namespace Paramatrix.Content
             SourceLocation source,
             IEnumerable<StateDefinition> states,
             string name,
-            InteractionType primaryInteraction)
+            InteractionType primaryInteraction,
+            IEnumerable<string> emotions)
             : base(id, source, states)
         {
             Name = name;
             PrimaryInteraction = primaryInteraction;
+            var list = new List<string>(emotions ?? Array.Empty<string>());
+            list.Sort(StringComparer.Ordinal);
+            _emotions = new ReadOnlyCollection<string>(list);
         }
 
-        /// <summary>Display name (VN dialogue speaker).</summary>
+        private readonly ReadOnlyCollection<string> _emotions;
+
+        /// <summary>Display name (inventory hints, editor tools). Dialogues do not show it (Р10).</summary>
         public string Name { get; }
 
         public InteractionType PrimaryInteraction { get; }
+
+        /// <summary>Avatar emotions, sorted; empty when the character has no avatars and cannot speak in a conversation.</summary>
+        public IReadOnlyList<string> Emotions => _emotions;
+
+        public bool HasEmotion(string emotion) => _emotions.Contains(emotion);
 
         public StateDefinition LocationState => StatesByProperty[BuiltInStates.Location];
     }

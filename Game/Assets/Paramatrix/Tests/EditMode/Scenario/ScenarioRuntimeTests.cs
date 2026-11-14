@@ -48,9 +48,7 @@ namespace Paramatrix.Tests.Scenario
             h.Click(InteractionType.Exit, "object.window");
 
             Assert.That(h.Get("story.flags", "a").AsBoolean, Is.False);
-            Assert.That(h.TakeLog(), Is.EqualTo(new[] { "acquire", "line:character.paranoik:Туда не пройти." }));
-            h.Complete();
-            Assert.That(h.TakeLog(), Is.EqualTo(new[] { "release:Completed" }));
+            Assert.That(h.TakeLog(), Is.EqualTo(new[] { "say:character.paranoik:Туда не пройти." }), "a monologue takes no control (Р10)");
         }
 
         [Test]
@@ -169,7 +167,7 @@ namespace Paramatrix.Tests.Scenario
             h.Click(InteractionType.Primary, "object.window");
 
             Assert.That(h.Get("story.flags", "a").AsBoolean, Is.False);
-            Assert.That(h.TakeLog(), Is.EqualTo(new[] { "acquire", "line:character.paranoik:Ничего не происходит." }));
+            Assert.That(h.TakeLog(), Is.EqualTo(new[] { "say:character.paranoik:Ничего не происходит." }));
         }
 
         [Test]

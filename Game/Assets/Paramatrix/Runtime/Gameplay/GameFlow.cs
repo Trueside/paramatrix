@@ -11,11 +11,16 @@ namespace Paramatrix.Gameplay
         System,
     }
 
+    /// <summary>Monologues are not a presentation: they never take control (Р10).</summary>
     public enum DialoguePresentation
     {
         None = 1,
-        Minimal,
-        VisualNovel,
+
+        /// <summary>A conversation: the world pauses, only advancing the dialogue is allowed.</summary>
+        Normal,
+
+        /// <summary>A novel (Р12): as a conversation, on its own dreamy screen with the partner in the middle.</summary>
+        Novel,
     }
 
     [Flags]

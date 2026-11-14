@@ -23,7 +23,7 @@ namespace Paramatrix.Gameplay
             Dialogue = new DialogueSystem(registry, State, Flow, ports.Dialogue);
             Inventory = new InventorySystem(registry, State);
             Location = new LocationSystem(registry, State, Flow, ports.Scenes, diagnostics);
-            Interaction = new InteractionSystem(registry, Flow, Inventory, ports.Navigation, diagnostics);
+            Interaction = new InteractionSystem(registry, Flow, Inventory, Dialogue, ports.Reach);
 
             Scenario = new ScenarioRuntime(
                 registry,

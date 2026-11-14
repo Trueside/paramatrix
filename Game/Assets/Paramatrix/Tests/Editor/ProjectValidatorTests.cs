@@ -4,8 +4,10 @@ using NUnit.Framework;
 using Paramatrix.Content;
 using Paramatrix.Unity;
 using Paramatrix.Unity.Editor;
+using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace Paramatrix.EditorTests
@@ -67,11 +69,13 @@ namespace Paramatrix.EditorTests
         {
             var root = Make(scene, "Location").AddComponent<LocationRoot>();
             SerializedFields.Set(root, "locationId", id);
+            SerializedFields.Set(root, "dialogueLine", DemoSceneBuilder.DialogueLine);
             foreach (var (name, isDefault) in entries.Length == 0 ? new[] { ("default", true) } : entries)
             {
                 var entry = Make(scene, "Entry " + name).AddComponent<EntryPoint>();
                 SerializedFields.Set(entry, "entryName", name);
                 SerializedFields.Set(entry, "isDefault", isDefault);
+                SerializedFields.Set(entry, "facing", (int)Facing.Right);
             }
         }
 
@@ -146,8 +150,75 @@ namespace Paramatrix.EditorTests
             var scene = NewScene();
             var entry = Make(scene, "Entry").AddComponent<EntryPoint>();
             SerializedFields.Set(entry, "isDefault", true);
+            SerializedFields.Set(entry, "facing", (int)Facing.Left);
 
             AssertErrors(Validate(Content(), null, ("Office", scene)), "has no LocationRoot");
+        }
+
+        [Test]
+        public void EntryPointMustSayWhereTheHeroLooks()
+        {
+            var scene = NewScene();
+            Location(scene, "location.office");
+            var entry = Make(scene, "Entry door").AddComponent<EntryPoint>();
+            SerializedFields.Set(entry, "entryName", "door");
+
+            AssertErrors(Validate(Content(), null, ("Office", scene)), "'door' does not say where the hero looks");
+        }
+
+        [Test]
+        public void EntryPointMustBeOnTheFloor()
+        {
+            var scene = NewScene();
+            Location(scene, "location.office", ("default", true), ("far", false));
+            scene.GetRootGameObjects().Single(g => g.name == "Entry far").transform.position = new Vector3(9f, 0f, 0f);
+
+            AssertErrors(Validate(Content(), null, ("Office", scene)), "'far' at X 9 is off the floor");
+        }
+
+        [Test]
+        public void ViewIsAtLeastOneScreenAndHoldsTheFloor()
+        {
+            var narrow = NewScene();
+            Location(narrow, "location.office");
+            var root = narrow.GetRootGameObjects().Single(g => g.name == "Location").GetComponent<LocationRoot>();
+            SerializedFields.Set(root, "viewMinX", -9f);
+            SerializedFields.Set(root, "viewMaxX", 9f);
+            SerializedFields.Set(root, "floorMinX", -9f);
+            SerializedFields.Set(root, "floorMaxX", 9f);
+            AssertErrors(Validate(Content(), null, ("Office", narrow)), "narrower than one screen");
+
+            var wide = NewScene();
+            Location(wide, "location.office");
+            root = wide.GetRootGameObjects().Single(g => g.name == "Location").GetComponent<LocationRoot>();
+            SerializedFields.Set(root, "floorMaxX", 11f);
+            AssertErrors(Validate(Content(), null, ("Office", wide)), "floor reaches past its view");
+        }
+
+        [Test]
+        public void ParallaxLayerFollowsLessThanTheCameraAndCarriesNoEntities()
+        {
+            var content = Content("{ 'id': 'object.door', 'primary_interaction': 'exit' }");
+            var scene = Office(content);
+            var horizon = Make(scene, "Horizon").AddComponent<ParallaxLayer>();
+            SerializedFields.Set(horizon, "follow", 1f);
+            var far = Make(scene, "Far").AddComponent<ParallaxLayer>();
+            SerializedFields.Set(far, "follow", 0.5f);
+            View<ObjectView>(scene, "object.door").transform.SetParent(far.transform);
+
+            AssertErrors(Validate(content, null, ("Office", scene)), "'Horizon' follows the camera by 1", "'Far' carries an entity");
+        }
+
+        [TestCase(0)]
+        [TestCase(72)]
+        [TestCase(PixelGrid.Height - DialogueView.AvatarHeightGridPixels + 1)]
+        public void ConversationLineIsAboveTheFloorAndLeavesRoomForTheAvatar(int line)
+        {
+            var scene = NewScene();
+            Location(scene, "location.office");
+            SerializedFields.Set(scene.GetRootGameObjects().Single(g => g.name == "Location").GetComponent<LocationRoot>(), "dialogueLine", line);
+
+            AssertErrors(Validate(Content(), null, ("Office", scene)), $"conversation line {line} is not between");
         }
 
         [Test]
@@ -323,6 +394,133 @@ namespace Paramatrix.EditorTests
 
             AssertErrors(Validate(content, null, ("Office", Office(content))),
                 "move needs character.hero", "move needs object.lamp");
+        }
+
+        // ---------------- pixel grid ----------------
+
+        private const string PlaceholderSprite = "Assets/Paramatrix/Art/Placeholder.png";
+
+        private static ValidationReport ValidateGrid(Scene? bootstrap, params Scene[] scenes)
+        {
+            var report = new ValidationReport();
+            ProjectValidator.ValidatePixelGrid(bootstrap, scenes, report);
+            return report;
+        }
+
+        private static PixelPerfectCamera GridCamera(Scene scene)
+        {
+            var gameObject = Make(scene, "Main Camera");
+            gameObject.tag = "MainCamera";
+            var camera = gameObject.AddComponent<PixelPerfectCamera>();
+            camera.assetsPPU = PixelGrid.PixelsPerUnit;
+            camera.refResolutionX = PixelGrid.Width;
+            camera.refResolutionY = PixelGrid.Height;
+            camera.gridSnapping = PixelPerfectCamera.GridSnapping.UpscaleRenderTexture;
+            camera.cropFrame = PixelPerfectCamera.CropFrame.StretchFill;
+            SerializedFields.Set(camera, "m_FilterMode", (int)PixelPerfectCamera.PixelPerfectFilterMode.RetroAA);
+            return camera;
+        }
+
+        [Test]
+        public void GridCameraAsTheStandardSaysIsValid()
+        {
+            var bootstrap = NewScene();
+            GridCamera(bootstrap);
+            AssertErrors(ValidateGrid(bootstrap, bootstrap));
+        }
+
+        [Test]
+        public void BootstrapNeedsAPixelPerfectCamera()
+        {
+            var bootstrap = NewScene();
+            Make(bootstrap, "Main Camera").AddComponent<Camera>();
+            AssertErrors(ValidateGrid(bootstrap, bootstrap), "exactly one PixelPerfectCamera");
+        }
+
+        [Test]
+        public void GridCameraSettingsMustMatchTheStandard()
+        {
+            var bootstrap = NewScene();
+            var camera = GridCamera(bootstrap);
+            camera.assetsPPU = 100;
+            camera.refResolutionX = 640;
+            camera.refResolutionY = 360;
+            camera.gridSnapping = PixelPerfectCamera.GridSnapping.PixelSnapping;
+            camera.cropFrame = PixelPerfectCamera.CropFrame.Windowbox;
+            SerializedFields.Set(camera, "m_FilterMode", (int)PixelPerfectCamera.PixelPerfectFilterMode.Point);
+            camera.gameObject.tag = "Untagged";
+
+            AssertErrors(ValidateGrid(bootstrap, bootstrap),
+                "assets pixels per unit", "reference resolution", "grid snapping", "crop frame", "filter mode", "not on the MainCamera");
+        }
+
+        [Test]
+        public void DynamicLightIsAnError()
+        {
+            var office = NewScene();
+            Make(office, "Lamp").AddComponent<Light2D>();
+            AssertErrors(ValidateGrid(null, office), "has a 2D light 'Lamp'");
+        }
+
+        [Test]
+        public void ArtFolderSpriteIsOnTheGrid()
+        {
+            var office = NewScene();
+            Make(office, "Door").AddComponent<SpriteRenderer>().sprite = AssetDatabase.LoadAssetAtPath<Sprite>(PlaceholderSprite);
+            AssertErrors(ValidateGrid(null, office));
+        }
+
+        [Test]
+        public void HandPlacedSpritesStayOnTheGrid()
+        {
+            var office = NewScene();
+            var art = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Paramatrix/Art/Paranoik_Stand.png");
+            var placeholder = AssetDatabase.LoadAssetAtPath<Sprite>(PlaceholderSprite);
+
+            var good = Make(office, "Desk");
+            good.AddComponent<SpriteRenderer>().sprite = art;
+            good.transform.position = new Vector3(5f / PixelGrid.PixelsPerUnit, -3f / PixelGrid.PixelsPerUnit, 0f);
+            var hotspot = Make(office, "Hotspot");
+            hotspot.AddComponent<SpriteRenderer>().sprite = placeholder;
+            hotspot.transform.localScale = new Vector3(4f, 7f, 1f); // the placeholder may be stretched
+
+            var between = Make(office, "Lamp");
+            between.AddComponent<SpriteRenderer>().sprite = art;
+            between.transform.position = new Vector3(0.01f, 0f, 0f);
+            var scaled = Make(office, "Shelf");
+            scaled.AddComponent<SpriteRenderer>().sprite = art;
+            scaled.transform.localScale = new Vector3(1.5f, 1.5f, 1f);
+            var rotated = Make(office, "Picture");
+            rotated.AddComponent<SpriteRenderer>().sprite = art;
+            rotated.transform.rotation = Quaternion.Euler(0f, 0f, 10f);
+
+            AssertErrors(ValidateGrid(null, office), "'Lamp' in scene", "'Shelf' in scene", "'Picture' in scene");
+        }
+
+        [Test]
+        public void SpriteWithoutPixelArtImportIsAnError()
+        {
+            var office = NewScene();
+            var texture = new Texture2D(4, 4);
+            var renderer = Make(office, "Door").AddComponent<SpriteRenderer>();
+            renderer.sprite = Sprite.Create(texture, new Rect(0, 0, 4, 4), Vector2.one / 2f, PixelGrid.PixelsPerUnit);
+            try
+            {
+                AssertErrors(ValidateGrid(null, office), "Sprite of 'Door' in scene");
+            }
+            finally
+            {
+                Object.DestroyImmediate(renderer.sprite);
+                Object.DestroyImmediate(texture);
+            }
+        }
+
+        [Test]
+        public void ArtFolderImportRuleMatchesItsCheck()
+        {
+            var importer = (TextureImporter)AssetImporter.GetAtPath(PlaceholderSprite);
+            Assert.That(PixelArtImport.Problem(importer), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<Sprite>(PlaceholderSprite).pixelsPerUnit, Is.EqualTo(PixelGrid.PixelsPerUnit));
         }
     }
 }

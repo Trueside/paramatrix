@@ -24,6 +24,9 @@ namespace Paramatrix.Unity
         private InputRouter input;
 
         [SerializeField]
+        private WorldCamera worldCamera;
+
+        [SerializeField]
         private DialogueView dialogueView;
 
         [SerializeField]
@@ -59,6 +62,8 @@ namespace Paramatrix.Unity
 
         public InputRouter Input => input;
 
+        public WorldCamera WorldCamera => worldCamera;
+
         public DialogueView DialogueView => dialogueView;
 
         public InventoryView InventoryView => inventoryView;
@@ -76,6 +81,8 @@ namespace Paramatrix.Unity
 
         /// <summary>True when content or start-up failed; details are in <see cref="Diagnostics"/>.</summary>
         public bool HasFailed { get; private set; }
+
+        private void Awake() => FramePacing.Apply();
 
         private void Start()
         {
@@ -100,7 +107,7 @@ namespace Paramatrix.Unity
                 return;
             }
 
-            _scenes = new SceneLoader(hero);
+            _scenes = new SceneLoader(hero, worldCamera);
             var operations = new WorldOperations();
             var storage = new FileSaveStorage(Application.persistentDataPath);
             var ports = new PresentationPorts(_scenes, hero, dialogueView, operations, operations, storage);
@@ -128,8 +135,8 @@ namespace Paramatrix.Unity
             _scenes.Bind(Session.Registry, Representations);
             hero.Bind(Representations);
             operations.Bind(Representations, Session.Scenario);
-            input.Bind(Session, hero, Representations);
-            dialogueView.Bind(Representations, Diagnostics, Font);
+            input.Bind(Session, hero, Representations, dialogueView);
+            dialogueView.Bind(Representations, Diagnostics, Font, manifest);
             inventoryView.Bind(Session, Font);
             worldPause.Bind(Session.Flow);
             transitionCurtain.Bind(Session.Flow); // before StartNewGame: the first scene load is covered too

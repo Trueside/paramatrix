@@ -18,6 +18,9 @@ namespace Paramatrix.Content
         Event,
         Dialogue,
         Response,
+
+        /// <summary>An avatar emotion of the common dictionary (Р10): file name = the ID name, a Russian name for authors.</summary>
+        Emotion,
     }
 
     public static class EntityKinds
@@ -34,6 +37,7 @@ namespace Paramatrix.Content
             ("event", EntityKind.Event),
             ("dialogue", EntityKind.Dialogue),
             ("response", EntityKind.Response),
+            ("emotion", EntityKind.Emotion),
         };
 
         public static bool TryFromPrefix(string prefix, out EntityKind kind)

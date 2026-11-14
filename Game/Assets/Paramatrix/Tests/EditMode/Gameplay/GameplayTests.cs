@@ -35,11 +35,11 @@ namespace Paramatrix.Tests.Gameplay
             "{ 'id': 'object.window', 'primary_interaction': 'primary' }",
             "{ 'id': 'item.key', 'name': 'Ключ', 'description': 'Латунный.', 'initial_holder': 'location.office' }",
             "{ 'id': 'item.note', 'name': 'Записка', 'description': 'Мятая.', 'initial_holder': 'inventory' }",
-            "{ 'id': 'character.trinity', 'name': 'Тринити', 'initial_location': 'location.office', 'primary_interaction': 'talk' }",
+            "{ 'id': 'character.trinity', 'name': 'Тринити', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': ['default'] }",
             "{ 'id': 'story.flags', 'states': { " + string.Join(", ", Flag("intro_done"), Flag("radio"), Flag("met_trinity"), Flag("ready"), Flag("combined"), Flag("broken_road")) + " } }",
 
-            "{ 'id': 'dialogue.intro', 'mode': 'minimal', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'Где я?' }, { 'speaker': 'character.paranoik', 'text': 'Офис.' } ] }",
-            "{ 'id': 'dialogue.trinity', 'mode': 'vn', 'lines': [ { 'speaker': 'character.trinity', 'text': 'Он ждёт.' }, { 'speaker': 'character.paranoik', 'text': 'Кто?' } ] }",
+            "{ 'id': 'dialogue.intro', 'mode': 'normal', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'Где я?' }, { 'speaker': 'character.paranoik', 'text': 'Офис.' } ] }",
+            "{ 'id': 'dialogue.trinity', 'mode': 'normal', 'lines': [ { 'speaker': 'character.trinity', 'text': 'Он ждёт.' }, { 'speaker': 'character.paranoik', 'text': 'Кто?' } ] }",
 
             "{ 'id': 'event.intro', 'execution': 'exclusive', 'repeat': 'once', 'triggers': [ { 'type': 'location_entered', 'location': 'location.office' } ]," +
             "  'launch_condition': " + FlagIs("intro_done", false) + ", 'actions': [ { 'action': 'dialogue', 'dialogue': 'dialogue.intro' }, " + Set("intro_done", true) + " ] }",
@@ -72,10 +72,14 @@ namespace Paramatrix.Tests.Gameplay
             "  'triggers': [ { 'type': 'conditions_met', 'condition': { 'all': [ " + FlagIs("met_trinity", true) + ", " + Locked(false) + " ] } } ]," +
             "  'actions': [ " + Set("ready", true) + " ] }",
 
-            "{ 'id': 'dialogue.trinity_bubble', 'mode': 'minimal', 'lines': [ { 'speaker': 'character.trinity', 'text': 'Смотри.' } ] }",
             "{ 'id': 'event.ask', 'execution': 'exclusive', 'repeat': 'repeatable', 'triggers': [ { 'type': 'interaction', 'interaction': 'inspect', 'target': 'object.window' } ]," +
             "  'launch_condition': { 'target': 'character.trinity', 'property': 'location', 'operator': 'equals', 'value': 'location.corridor' }," +
-            "  'actions': [ { 'action': 'dialogue', 'dialogue': 'dialogue.trinity_bubble' } ] }",
+            "  'actions': [ { 'action': 'say', 'speaker': 'character.trinity', 'text': 'Смотри.' } ] }",
+
+            // Monologues (Р10): Trinity's prepared lines on inspect, her own stubs; the window has none and uses the common pool.
+            "{ 'id': 'response.trinity_look', 'tier': 'specific', 'interaction': 'inspect', 'target': 'character.trinity', 'lines': [ 'Чёрная кожа.', 'Тёмные очки.' ] }",
+            "{ 'id': 'response.trinity_stub_1', 'tier': 'generic', 'interaction': 'inspect', 'target': 'character.trinity', 'text': 'Она всё ещё здесь.' }",
+            "{ 'id': 'response.window_think', 'tier': 'generic', 'interaction': 'primary', 'text': 'Хм.' }",
 
             "{ 'id': 'response.door_locked', 'tier': 'specific', 'interaction': 'exit', 'target': 'object.office_door', 'condition': " + Locked(true) + ", 'text': 'Заперто.' }",
         };
@@ -171,20 +175,20 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("object.office_door");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:object.office_door", "say:paranoik:Заперто." }));
-            Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Scenario));
-            bed.Advance();
+            // The exit scene's condition is false: the hero is not stopped, the specific response answers as a monologue (Р10).
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:paranoik:Заперто." }));
             Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
         }
 
         [Test]
-        public void InspectNeedsNoApproach()
+        public void InspectWorksFromAnyDistance()
         {
             var bed = AfterIntro();
+            bed.OutOfReach.Add("object.window");
 
             bed.Click("object.window", PointerButton.Secondary);
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "say:paranoik:Ничего особенного." }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:paranoik:Ничего особенного." }));
         }
 
         [Test]
@@ -194,7 +198,7 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("item.key");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:item.key", "anim:paranoik:bend_down" }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "face:item.key", "anim:paranoik:bend_down" }));
             Assert.That(bed.Get("item.key", "holder").AsEnum, Is.EqualTo("inventory"));
             Assert.That(bed.Session.Inventory.Items.Select(i => i.Id.Value), Is.EqualTo(new[] { "item.key", "item.note" }), "declaration order (T18)");
             Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
@@ -209,7 +213,7 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("item.key");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:item.key", "say:paranoik:Не могу это взять." }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:paranoik:Не могу это взять." }), "the take scene is used up: a monologue, the hero is not stopped");
         }
 
         [Test]
@@ -236,7 +240,7 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("object.window");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:object.window", "say:paranoik:Не подходит." }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:paranoik:Не подходит." }));
             Assert.That(bed.Session.Inventory.Selected, Is.EqualTo(EntityId.Parse("item.key")), "0.3 §4.5");
         }
 
@@ -268,45 +272,35 @@ namespace Paramatrix.Tests.Gameplay
         }
 
         [Test]
-        public void MovingCancelsApproach()
+        public void OutOfReachALeftClickDoesNothing()
         {
             var bed = AfterIntro();
-            bed.DeferApproach = true;
+            bed.OutOfReach.Add("item.key");
+            bed.OutOfReach.Add("object.office_door");
+            bed.OutOfReach.Add("character.trinity");
 
+            bed.Click("item.key");
             bed.Click("object.office_door");
-            Assert.That(bed.Session.Interaction.IsApproaching, Is.True);
-            bed.Session.Interaction.CancelApproach();
+            bed.Click("character.trinity");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:object.office_door", "approach:cancel" }));
-            Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player), "no interaction happened");
+            Assert.That(bed.TakeLog(), Is.Empty, "no scene, no monologue, no walk: the player walks closer himself (Р11)");
+            Assert.That(bed.Get("item.key", "holder").AsEnum, Is.Not.EqualTo("inventory"));
+            Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
+            bed.AssertNoErrors();
         }
 
         [Test]
-        public void NewClickReplacesPendingApproach()
+        public void WithinReachTheSameClickWorks()
         {
             var bed = AfterIntro();
-            bed.DeferApproach = true;
+            bed.OutOfReach.Add("item.key");
+            bed.Click("item.key");
 
-            bed.Click("object.office_door");
-            bed.Click("object.window");
-            bed.Arrive();
+            bed.OutOfReach.Remove("item.key"); // the player walked up to it
+            bed.Click("item.key");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[]
-            {
-                "approach:object.office_door", "approach:cancel", "approach:object.window", "say:paranoik:Ничего не происходит.",
-            }));
-        }
-
-        [Test]
-        public void FailedApproachIsAnError()
-        {
-            var bed = AfterIntro();
-            bed.DeferApproach = true;
-
-            bed.Click("object.window");
-            bed.CompleteApproach(ApproachOutcome.Failed, "no approach point");
-
-            Assert.That(bed.Errors, Is.EqualTo(new[] { DiagnosticCode.ApproachFailed }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "face:item.key", "anim:paranoik:bend_down" }));
+            Assert.That(bed.Session.Inventory.IsCarried(EntityId.Parse("item.key")), Is.True);
         }
 
         // ================= locations =================
@@ -319,7 +313,7 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("object.office_door");
 
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:object.office_door", "anim:paranoik:open_door", "scene:Location_Corridor:from_office" }));
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "face:object.office_door", "anim:paranoik:open_door", "scene:Location_Corridor:from_office" }));
             Assert.That(bed.Location, Is.EqualTo("location.corridor"));
             Assert.That(bed.Session.Scenario.CurrentVisit, Is.EqualTo(2));
             Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
@@ -360,28 +354,29 @@ namespace Paramatrix.Tests.Gameplay
             bed.FailSceneLoad = false;
             bed.TakeLog();
             bed.Click("object.office_door");
-            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "approach:object.office_door" }), "blocked until a load (Р3), no fallback");
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "face:object.office_door" }), "blocked until a load (Р3), no fallback");
             Assert.That(bed.Errors.Last(), Is.EqualTo(DiagnosticCode.EventBlockedByFailure));
         }
 
         // ================= dialogue =================
 
         [Test]
-        public void VisualNovelDialogueSetsPresentation()
+        public void ConversationPausesAndShowsEmotions()
         {
             var bed = AfterIntro();
 
             bed.Click("character.trinity");
 
-            Assert.That(bed.Session.Flow.Presentation, Is.EqualTo(DialoguePresentation.VisualNovel));
-            Assert.That(bed.CurrentLine.Value.SpeakerName, Is.EqualTo("Тринити"));
+            Assert.That(bed.Session.Flow.Presentation, Is.EqualTo(DialoguePresentation.Normal));
+            Assert.That(bed.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
+            Assert.That(bed.CurrentLine.Value.Emotion, Is.EqualTo("default"));
             bed.FinishDialogues();
             Assert.That(bed.Flag("met_trinity"), Is.True);
             Assert.That(bed.Session.Flow.Presentation, Is.EqualTo(DialoguePresentation.None));
         }
 
         [Test]
-        public void BubbleSpeakerMustBePresent()
+        public void SceneMonologueSpeakerMustBePresent()
         {
             var bed = AfterIntro();
             bed.Session.State.Set(StateAddress.Parse("character.trinity", "location"), StateValue.Enum("location.corridor"), MutationSource.System);
@@ -389,16 +384,16 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.TakeLog();
 
-            bed.Click("object.window", PointerButton.Secondary); // event.ask: a bubble line spoken by Trinity
+            bed.Click("object.window", PointerButton.Secondary); // event.ask: Trinity says a line, but she is not here
 
             Assert.That(bed.Session.Scenario.GetStatus(EntityId.Parse("event.ask")), Is.EqualTo(EventStatus.Failed));
-            Assert.That(bed.Errors, Is.EqualTo(new[] { DiagnosticCode.OperationFailed }));
-            Assert.That(bed.TakeLog(), Is.Empty, "nothing was shown");
+            Assert.That(bed.Errors, Is.EqualTo(new[] { DiagnosticCode.MonologueFailed }));
+            Assert.That(bed.Bubbles, Is.Empty, "nothing was shown");
             Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
         }
 
         [Test]
-        public void VisualNovelSpeakerNeedsNoPresence()
+        public void ConversationSpeakerMustBePresent()
         {
             var bed = AfterIntro();
             bed.Session.State.Set(StateAddress.Parse("character.trinity", "location"), StateValue.Enum("location.corridor"), MutationSource.System);
@@ -406,7 +401,126 @@ namespace Paramatrix.Tests.Gameplay
 
             bed.Click("character.trinity");
 
-            Assert.That(bed.Session.Flow.Presentation, Is.EqualTo(DialoguePresentation.VisualNovel));
+            Assert.That(bed.Errors, Is.EqualTo(new[] { DiagnosticCode.OperationFailed }));
+            Assert.That(bed.Session.Flow.Presentation, Is.EqualTo(DialoguePresentation.None));
+            Assert.That(bed.CurrentLine, Is.Null);
+        }
+
+        // ================= monologues (Р10) =================
+
+        [Test]
+        public void MonologueTakesNoControlAndDoesNotStopTheHero()
+        {
+            var bed = AfterIntro();
+
+            bed.Click("object.window"); // primary: the common stub pool
+
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:paranoik:Хм." }), "no facing: the hero keeps walking");
+            Assert.That(bed.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
+            Assert.That(bed.Session.Flow.Permissions & PlayerPermissions.Move, Is.EqualTo(PlayerPermissions.Move));
+            Assert.That(bed.Session.Save.CanSave, Is.True, "a monologue does not block saving");
+            bed.AssertNoErrors();
+        }
+
+        [Test]
+        public void SceneStopsTheHeroAndTurnsHimToTheTarget()
+        {
+            var bed = AfterIntro();
+            bed.Click("character.trinity");
+            Assert.That(bed.TakeLog().First(), Is.EqualTo("face:character.trinity"));
+        }
+
+        [Test]
+        public void RightClickOnEmptySpaceMovesTheThoughtOnThenClosesIt()
+        {
+            var bed = AfterIntro();
+            bed.Click("character.trinity", PointerButton.Secondary);
+            Assert.That(bed.Bubbles["paranoik"], Is.EqualTo("Чёрная кожа."));
+
+            bed.ClickEmpty();
+            Assert.That(bed.Bubbles["paranoik"], Is.EqualTo("Тёмные очки."), "the next prepared line");
+
+            bed.ClickEmpty();
+            Assert.That(bed.Bubbles.ContainsKey("paranoik"), Is.False, "nothing prepared is left: the thought closes, no stub");
+
+            bed.ClickEmpty();
+            Assert.That(bed.Bubbles, Is.Empty, "no thought shown: nothing happens");
+            bed.Click("character.trinity", PointerButton.Secondary);
+            Assert.That(bed.Bubbles["paranoik"], Is.EqualTo("Она всё ещё здесь."), "said lines count as said");
+            bed.AssertNoErrors();
+        }
+
+        [Test]
+        public void RightClickOnEmptySpaceClosesAThoughtThatIsNotPrepared()
+        {
+            var bed = AfterIntro();
+            bed.Click("object.window"); // a stub
+            bed.TakeLog();
+
+            bed.ClickEmpty();
+
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:hide:paranoik" }));
+        }
+
+        [Test]
+        public void AStubAfterAPreparedLineIsNotMovedOn()
+        {
+            var bed = AfterIntro();
+            bed.Click("character.trinity", PointerButton.Secondary);
+            bed.Click("object.window"); // the hero says a stub: the bubble no longer shows the prepared thought
+            bed.TakeLog();
+
+            bed.ClickEmpty();
+
+            Assert.That(bed.TakeLog(), Is.EqualTo(new[] { "bubble:hide:paranoik" }), "a stub is not moved on");
+        }
+
+        [Test]
+        public void PreparedMonologueThenOwnStubsWithEndMark()
+        {
+            var bed = AfterIntro();
+            var said = new List<string>();
+            for (var i = 0; i < 6; i++)
+            {
+                bed.Click("character.trinity", PointerButton.Secondary);
+                said.Add(bed.Bubbles["paranoik"]);
+            }
+
+            Assert.That(said, Is.EqualTo(new[] { "Чёрная кожа.", "Тёмные очки.", "Она всё ещё здесь.", "…", "Она всё ещё здесь.", "…" }));
+            bed.AssertNoErrors();
+        }
+
+        [Test]
+        public void PreparedMonologueProgressIsSaved()
+        {
+            var bed = AfterIntro();
+            bed.Click("character.trinity", PointerButton.Secondary);
+            Assert.That(bed.SaveGame().Succeeded, Is.True);
+
+            var loaded = GameTestBed.LoadIntoNewSession(Game, bed.Saves, "slot1", out var result);
+            Assert.That(result.Succeeded, Is.True, TestContent.Describe(result.Diagnostics));
+            loaded.Click("character.trinity", PointerButton.Secondary);
+            Assert.That(loaded.Bubbles["paranoik"], Is.EqualTo("Тёмные очки."), "the monologue goes on, it does not start over");
+        }
+
+        [Test]
+        public void ConversationAndTransitionClearMonologues()
+        {
+            var bed = AfterIntro();
+            bed.Click("object.window");
+            Assert.That(bed.Bubbles, Is.Not.Empty);
+
+            bed.Click("character.trinity");
+            Assert.That(bed.Bubbles, Is.Empty, "a conversation takes the screen");
+            bed.FinishDialogues();
+
+            bed.Click("object.window");
+            TakeKeyAndUnlock(bed);
+            bed.Click("object.window");
+            Assert.That(bed.Bubbles, Is.Not.Empty);
+            bed.Click("object.office_door");
+            Assert.That(bed.Location, Is.EqualTo("location.corridor"));
+            Assert.That(bed.Bubbles, Is.Empty, "leaving the location takes its monologues");
         }
 
         [Test]
@@ -579,7 +693,7 @@ namespace Paramatrix.Tests.Gameplay
 
             Assert.That(flow.TryAcquireScenarioControl(out var token), Is.True);
             Assert.That(flow.Permissions, Is.EqualTo(PlayerPermissions.None));
-            flow.SetPresentation(DialoguePresentation.Minimal);
+            flow.SetPresentation(DialoguePresentation.Normal);
             Assert.That(flow.Permissions, Is.EqualTo(PlayerPermissions.AdvanceDialogue));
             flow.SetPresentation(DialoguePresentation.None);
             Assert.That(flow.TryAcquireScenarioControl(out _), Is.False, "one owner at a time");
@@ -608,13 +722,19 @@ namespace Paramatrix.Tests.Gameplay
             Assert.Throws<System.InvalidOperationException>(() => flow.BeginSystemOperation(SystemOperation.LoadGame), "recover first");
         }
 
-        private sealed class NullPorts : ISceneLoader, IHeroNavigation, IDialogueView, IMovementPort, IAnimationPort, ISaveStorage
+        private sealed class NullPorts : ISceneLoader, IHeroReach, IDialogueView, IMovementPort, IAnimationPort, ISaveStorage
         {
             public void LoadLocationScene(string scene, string entry, System.Action<bool, string> done) => done(true, null);
 
-            public void Approach(EntityId target, System.Action<ApproachOutcome, string> done) => done(ApproachOutcome.Arrived, null);
+            public bool CanReach(EntityId target) => true;
 
-            public void Cancel()
+            public void FaceForInteraction(EntityId target)
+            {
+            }
+
+            public bool IsMonologueShown(EntityId speaker) => false;
+
+            public void HideMonologue(EntityId speaker)
             {
             }
 
@@ -622,7 +742,19 @@ namespace Paramatrix.Tests.Gameplay
             {
             }
 
+            public void ShowChoices(DialogueChoiceView choices)
+            {
+            }
+
             public void Hide()
+            {
+            }
+
+            public void Say(EntityId speaker, string text)
+            {
+            }
+
+            public void ClearMonologues()
             {
             }
 

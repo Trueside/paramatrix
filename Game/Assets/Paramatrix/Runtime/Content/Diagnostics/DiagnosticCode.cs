@@ -100,7 +100,6 @@ namespace Paramatrix.Content
         ChainAborted,
 
         // Gameplay systems
-        ApproachFailed,
         SceneLoadFailed,
         RecoveryEntered,
         SaveFailed,
@@ -108,5 +107,20 @@ namespace Paramatrix.Content
 
         // Unity layer
         StartupFailed,
+
+        // Dialogue modes, avatars and monologues (Р10)
+        InvalidEmotion,
+        DuplicateEmotion,
+        MissingDefaultEmotion,
+        UnknownEmotion,
+        SpeakerWithoutAvatars,
+        MonologueFailed,
+        AvatarMissing,
+        DialogueLineMissing,
+
+        // Choices and novel (Р12)
+        InvalidChoice,
+        InvalidDialoguePartner,
+        NovelPictureMissing,
     }
 }

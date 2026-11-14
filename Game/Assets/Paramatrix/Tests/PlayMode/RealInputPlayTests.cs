@@ -62,23 +62,35 @@ namespace Paramatrix.PlayTests
         [UnityTest]
         public IEnumerator ArrowKeyAdvancesDialogue()
         {
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.True, "intro line");
-            _keyboard = InputSystem.AddDevice<Keyboard>();
+            yield return StartTrinityConversation();
 
             yield return Press(Key.RightArrow);
+            Assert.That(_game.DialogueView.IsTyping, Is.False, "the first press shows the line whole");
+            Assert.That(_game.DialogueView.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
 
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "an arrow key closed the last line");
-            Assert.That(_game.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
+            yield return Press(Key.RightArrow);
+            Assert.That(_game.DialogueView.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.paranoik")), "an arrow key went on");
         }
 
         [UnityTest]
         public IEnumerator AnyLetterKeyAdvancesDialogue()
         {
-            _keyboard = InputSystem.AddDevice<Keyboard>();
+            yield return StartTrinityConversation();
 
             yield return Press(Key.Q);
+            yield return Press(Key.Q);
 
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False);
+            Assert.That(_game.DialogueView.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.paranoik")));
+        }
+
+        /// <summary>A conversation to advance: the intro is a monologue (Р10) and needs no key.</summary>
+        private IEnumerator StartTrinityConversation()
+        {
+            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "the intro is a monologue");
+            _keyboard = InputSystem.AddDevice<Keyboard>();
+            Click("character.trinity");
+            yield return WaitUntil(() => _game.DialogueView.IsConversationShown, "Trinity conversation");
+            Assert.That(_game.DialogueView.IsTyping, Is.True);
         }
 
         [UnityTest]
@@ -100,9 +112,8 @@ namespace Paramatrix.PlayTests
             Assert.That(_game.InventoryView.SelectionHint, Does.StartWith("Выбрано: Ключ."));
 
             Click("object.office_door");
-            yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "unlock line");
-            Assert.That(_game.DialogueView.BubbleText, Is.EqualTo("Замок щёлкнул. Дверь открыта."));
-            Assert.That(_game.Session.State.Get(StateAddress.Parse("object.office_door", "locked")).AsBoolean, Is.False);
+            yield return WaitUntil(() => !_game.Session.State.Get(StateAddress.Parse("object.office_door", "locked")).AsBoolean
+                && _game.Session.Flow.Owner == ControlOwner.Player, "door unlocked");
             Assert.That(_game.InventoryView.SelectionHint, Is.Null, "selection cleared by the scene");
             yield return null; // destroyed slots disappear at the end of the frame
             Assert.That(_game.InventoryView.Slots, Is.Empty, "the key is used up");
@@ -155,7 +166,8 @@ namespace Paramatrix.PlayTests
         {
             var view = _game.Representations.Find(EntityId.Parse(id));
             Assert.That(view, Is.Not.Null, id + " has no representation");
-            _game.Input.ClickAt(view.transform.position, PointerButton.Primary);
+            _game.StandBy(view);
+            _game.Input.ClickAt(view.GetComponentInChildren<SpriteRenderer>().bounds.center, PointerButton.Primary);
         }
 
         private IEnumerator FinishDialogue()

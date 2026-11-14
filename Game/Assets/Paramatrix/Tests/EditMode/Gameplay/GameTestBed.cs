@@ -11,13 +11,13 @@ using Paramatrix.Tests.Content;
 namespace Paramatrix.Tests.Gameplay
 {
     /// <summary>
-    /// A whole game session with a fake Unity layer. Scene loads and hero approaches complete immediately
-    /// unless deferred; dialogue lines are recorded and advanced explicitly; saves live in memory.
+    /// A whole game session with a fake Unity layer. Scene loads complete immediately; every target is within the
+    /// hero's reach unless listed in <see cref="OutOfReach"/>; dialogue lines are recorded and advanced explicitly; saves
+    /// live in memory.
     /// </summary>
-    internal sealed class GameTestBed : ISceneLoader, IHeroNavigation, IDialogueView, IMovementPort, IAnimationPort, ISaveStorage
+    internal sealed class GameTestBed : ISceneLoader, IHeroReach, IDialogueView, IMovementPort, IAnimationPort, ISaveStorage
     {
         private readonly Dictionary<string, string> _saves;
-        private Action<ApproachOutcome, string> _pendingApproach;
 
         private GameTestBed(Dictionary<string, string> saves)
         {
@@ -32,7 +32,8 @@ namespace Paramatrix.Tests.Gameplay
 
         public DialogueLineView? CurrentLine { get; private set; }
 
-        public bool DeferApproach { get; set; }
+        /// <summary>Targets (IDs) the hero cannot reach now (Р11).</summary>
+        public SortedSet<string> OutOfReach { get; } = new SortedSet<string>(StringComparer.Ordinal);
 
         public bool FailSceneLoad { get; set; }
 
@@ -82,15 +83,7 @@ namespace Paramatrix.Tests.Gameplay
             }
         }
 
-        public void Arrive() => CompleteApproach(ApproachOutcome.Arrived);
-
-        public void CompleteApproach(ApproachOutcome outcome, string error = null)
-        {
-            Assert.That(_pendingApproach, Is.Not.Null, "no approach in progress");
-            var callback = _pendingApproach;
-            _pendingApproach = null;
-            callback(outcome, error);
-        }
+        public void ClickEmpty(PointerButton button = PointerButton.Secondary) => Session.Interaction.ClickEmpty(button);
 
         public StateValue Get(string entity, string property) => Session.State.Get(StateAddress.Parse(entity, property));
 
@@ -139,38 +132,65 @@ namespace Paramatrix.Tests.Gameplay
             done(true, null);
         }
 
-        // ---------- IHeroNavigation ----------
+        // ---------- IHeroReach ----------
 
-        public void Approach(EntityId target, Action<ApproachOutcome, string> done)
-        {
-            Log.Add("approach:" + target);
-            if (DeferApproach)
-            {
-                _pendingApproach = done;
-                return;
-            }
+        public bool CanReach(EntityId target) => !OutOfReach.Contains(target.Value);
 
-            done(ApproachOutcome.Arrived, null);
-        }
-
-        public void Cancel()
-        {
-            Log.Add("approach:cancel");
-            _pendingApproach = null;
-        }
+        public void FaceForInteraction(EntityId target) => Log.Add("face:" + target);
 
         // ---------- IDialogueView ----------
 
         public void Show(DialogueLineView line)
         {
             CurrentLine = line;
+            CurrentChoices = null;
             Log.Add($"say:{line.Speaker.Name}:{line.Text}");
         }
 
         public void Hide()
         {
             CurrentLine = null;
+            CurrentChoices = null;
             Log.Add("hide");
+        }
+
+        public DialogueChoiceView CurrentChoices { get; private set; }
+
+        public void ShowChoices(DialogueChoiceView choices)
+        {
+            CurrentLine = null;
+            CurrentChoices = choices;
+            Log.Add("choose:" + string.Join("|", choices.Labels));
+        }
+
+        public void Choose(int index) => Assert.That(Session.Dialogue.Choose(index), Is.True, "no such option to take");
+
+        /// <summary>Monologue bubbles shown now, by speaker name (Р10).</summary>
+        public SortedDictionary<string, string> Bubbles { get; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
+
+        public void Say(EntityId speaker, string text)
+        {
+            Bubbles[speaker.Name] = text;
+            Log.Add($"bubble:{speaker.Name}:{text}");
+        }
+
+        public bool IsMonologueShown(EntityId speaker) => Bubbles.ContainsKey(speaker.Name);
+
+        public void HideMonologue(EntityId speaker)
+        {
+            if (Bubbles.Remove(speaker.Name))
+            {
+                Log.Add("bubble:hide:" + speaker.Name);
+            }
+        }
+
+        public void ClearMonologues()
+        {
+            if (Bubbles.Count > 0)
+            {
+                Bubbles.Clear();
+                Log.Add("bubbles:clear");
+            }
         }
 
         // ---------- movement / animation: complete at once ----------

@@ -11,8 +11,14 @@ namespace Paramatrix.Unity
         [SerializeField]
         private bool isDefault;
 
+        [SerializeField]
+        [Tooltip("Where the hero looks on arrival: away from the door he came through, into the room. Must be set.")]
+        private Facing facing;
+
         public string EntryName => entryName;
 
         public bool IsDefault => isDefault;
+
+        public Facing Facing => facing;
     }
 }

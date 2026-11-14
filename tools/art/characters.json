@@ -1,0 +1,54 @@
+{
+  "comment": "Character heights in grid pixels (figure top to feet). A character without 'height' gets 'default_height'; one with 'height' keeps it. All sources (*_clean.png) are drawn looking right; nothing is mirrored. Run tools/art/prepare-characters.ps1 after any change, then rebuild the scenes. Avatars (R10): add to a character \"avatars\": { \"source\": \"<folder with <emotion>.png directly in it; subfolders are not read>\", \"facing\": \"right\" or \"left\" (how the source is drawn) } and run tools/art/prepare-avatars.ps1, then Paramatrix > Collect Content. Avatars are pictures in Full HD screen pixels, all exactly 115x135 (the standard 229x270 card cut, halved); a placeholder is made with -Pad. Characters without avatars keep placeholders cut from the clean figures.",
+  "default_height": 170,
+  "characters": [
+    {
+      "id": "character.paranoik",
+      "source": "_img/Paranoik/e7_try4/paranoik_h144.png",
+      "out": "Game/Assets/Paramatrix/Art/Paranoik_Stand.png",
+      "final": "_img/beautiful_girl/touchup/Paranoik_Stand.png",
+      "avatars": { "source": "_img/Paranoik/_emotions", "facing": "right" },
+      "height": 148,
+      "canvas": {
+        "width": 73,
+        "height": 149,
+        "x": 21,
+        "y": 1,
+        "why": "the walk frames (_img/Paranoik/walk.png cut by split-row.ps1): canvas 73x149, soles on the bottom row, head centre at column 34. The source is already on the grid and drawn by hand at 148: height 148 keeps it 1:1. The standing hero stands on the same floor row with the head centre at the same column, or he jumps when he starts walking"
+      }
+    },
+    {
+      "id": "character.fem_paranoik",
+      "source": "_img/Fem_Paranoika/fempara_clean.png",
+      "out": "Game/Assets/Paramatrix/Art/FemParanoik_Stand.png",
+      "stepwise": { "max_step": 0.05, "pattern": "lanczos", "last": "sharp", "space": "srgb" },
+      "avatars": { "source": "_img/Fem_Paranoika/_emotions", "facing": "right" },
+      "height": 152
+    },
+    {
+      "id": "character.trinity",
+      "source": "_img/Trinity/Trinity_profile_clean.png",
+      "out": "Game/Assets/Paramatrix/Art/Trinity_Stand.png"
+    },
+    {
+      "id": "character.morpheus",
+      "source": "_img/Morpheus/morpheus_clean.png",
+      "out": "Game/Assets/Paramatrix/Art/Morpheus_Stand.png"
+    },
+    {
+      "id": "character.mr_srit",
+      "source": "_img/Mr_Srit/mrsrit_clean.png",
+      "height": 171,
+      "out": "Game/Assets/Paramatrix/Art/MrSrit_Stand.png"
+    },
+    {
+      "id": "character.beautiful_girl",
+      "source": "_img/beautiful_girl/beautiful_girl_3q_key.png",
+      "out": "Game/Assets/Paramatrix/Art/BeautifulGirl_Stand.png",
+      "height": 196,
+      "stepwise": { "max_step": 0.05, "pattern": "lanczos", "last": "sharp", "space": "srgb" },
+      "avatars": { "source": "_img/beautiful_girl/avatars", "facing": "right" },
+      "novel": { "source": "_img/beautiful_girl/novel", "facing": "right", "key": "green" }
+    }
+  ]
+}

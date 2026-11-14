@@ -27,12 +27,14 @@ namespace Paramatrix.Unity
         private GameSession _session;
         private HeroController _hero;
         private RepresentationRegistry _representations;
+        private DialogueView _dialogue;
 
-        public void Bind(GameSession session, HeroController hero, RepresentationRegistry representations)
+        public void Bind(GameSession session, HeroController hero, RepresentationRegistry representations, DialogueView dialogue)
         {
             _session = session;
             _hero = hero;
             _representations = representations;
+            _dialogue = dialogue;
         }
 
         private void OnEnable()
@@ -72,7 +74,11 @@ namespace Paramatrix.Unity
             var permissions = _session.Flow.Permissions;
             if ((permissions & PlayerPermissions.AdvanceDialogue) != 0)
             {
-                if (_advance.WasPressedThisFrame())
+                if (_session.Dialogue.IsChoosing)
+                {
+                    ReadChoice(); // a choice is answered only by taking an option: other keys do nothing
+                }
+                else if (_advance.WasPressedThisFrame())
                 {
                     AdvanceDialogue();
                 }
@@ -96,17 +102,12 @@ namespace Paramatrix.Unity
             }
         }
 
-        /// <summary>Keyboard walking; walking during an approach cancels the pending interaction (T13).</summary>
+        /// <summary>Keyboard walking: the only way the hero gets somewhere (Р11).</summary>
         public void Walk(float direction, float deltaTime)
         {
             if (_session == null || (_session.Flow.Permissions & PlayerPermissions.Move) == 0 || Mathf.Approximately(direction, 0f))
             {
                 return;
-            }
-
-            if (_session.Interaction.IsApproaching)
-            {
-                _session.Interaction.CancelApproach();
             }
 
             _hero.Walk(direction, deltaTime);
@@ -131,7 +132,47 @@ namespace Paramatrix.Unity
             }
         }
 
-        public void AdvanceDialogue() => _session?.Dialogue.Advance();
+        /// <summary>The hero's choice (Р12): the option's number key (1..9, main row or keypad) or a left click on it.</summary>
+        private void ReadChoice()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                for (var i = 0; i < 9; i++)
+                {
+                    if (keyboard[Key.Digit1 + i].wasPressedThisFrame || keyboard[Key.Numpad1 + i].wasPressedThisFrame)
+                    {
+                        ChooseOption(i);
+                        return;
+                    }
+                }
+            }
+
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame && _dialogue != null)
+            {
+                var option = _dialogue.ChoiceAt(mouse.position.ReadValue());
+                if (option >= 0)
+                {
+                    ChooseOption(option);
+                }
+            }
+        }
+
+        /// <summary>Takes option <paramref name="index"/> (from 0) of the hero's choice; false when there is no such option.</summary>
+        public bool ChooseOption(int index) => _session != null && _session.Dialogue.Choose(index);
+
+        /// <summary>While the line is being typed, the first press shows it whole (Р10); the next one advances.</summary>
+        public void AdvanceDialogue()
+        {
+            if (_dialogue != null && _dialogue.IsTyping)
+            {
+                _dialogue.CompleteTyping();
+                return;
+            }
+
+            _session?.Dialogue.Advance();
+        }
 
         private bool IsPointerOverUi() => eventSystem != null && eventSystem.IsPointerOverGameObject();
 

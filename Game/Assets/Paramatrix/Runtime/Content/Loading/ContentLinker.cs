@@ -37,6 +37,7 @@ namespace Paramatrix.Content
                 if (draft is WorldDraft world)
                 {
                     CheckReferences(world, unique, diagnostics);
+                    CheckEmotions(world, unique, diagnostics);
                 }
             }
 
@@ -301,6 +302,19 @@ namespace Paramatrix.Content
             return states;
         }
 
+        /// <summary>A character declares only emotions of the common dictionary (Р10): a typo is an error, not a new emotion.</summary>
+        private static void CheckEmotions(WorldDraft character, IReadOnlyDictionary<EntityId, Draft> drafts, DiagnosticBag diagnostics)
+        {
+            for (var i = 0; i < character.Emotions.Count; i++)
+            {
+                if (!EntityId.TryParse(EntityKinds.Prefix(EntityKind.Emotion) + "." + character.Emotions[i], out var id, out _) || !drafts.ContainsKey(id))
+                {
+                    diagnostics.Error(DiagnosticCode.UnknownEmotion, character.EmotionSources[i],
+                        $"{character.Id} declares emotion '{character.Emotions[i]}', which is not in the emotion dictionary (emotion.{character.Emotions[i]}).");
+                }
+            }
+        }
+
         private static Definition Build(
             Draft draft,
             Dictionary<EntityId, List<StateDefinition>> statesByEntity,
@@ -312,6 +326,8 @@ namespace Paramatrix.Content
                     return new GameSettingsDefinition(settings.Id, settings.Source, settings.PlayerCharacter);
                 case ConditionDefinitionDraft condition:
                     return new NamedConditionDefinition(condition.Id, condition.Source, conditions[condition.Id]);
+                case EmotionDraft emotion:
+                    return new EmotionDefinition(emotion.Id, emotion.Source, emotion.Name);
             }
 
             var world = (WorldDraft)draft;
@@ -319,7 +335,7 @@ namespace Paramatrix.Content
             switch (world.Id.Kind)
             {
                 case EntityKind.Character:
-                    return new CharacterDefinition(world.Id, world.Source, states, world.Name, world.PrimaryInteraction);
+                    return new CharacterDefinition(world.Id, world.Source, states, world.Name, world.PrimaryInteraction, world.Emotions);
                 case EntityKind.Item:
                     return new ItemDefinition(world.Id, world.Source, states, world.Name, world.Description, world.DeclarationOrder);
                 case EntityKind.Object:

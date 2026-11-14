@@ -18,12 +18,12 @@
         "locked": { "type": "boolean", "default": true, "persistence": "persistent", "mutation_policy": "scenario_only" }
       }
     },
-    { "id": "object.office_window", "primary_interaction": "primary" },
+    { "id": "object.office_poster", "primary_interaction": "primary" },
     { "id": "object.corridor_door", "primary_interaction": "exit" },
 
     { "id": "item.key", "name": "Ключ", "description": "Маленький латунный ключ.", "initial_holder": "location.office" },
 
-    { "id": "character.trinity", "name": "Тринити", "initial_location": "location.office", "primary_interaction": "talk" },
+    { "id": "character.trinity", "name": "Тринити", "initial_location": "location.office", "primary_interaction": "talk", "emotions": ["default"] },
 
     {
       "id": "condition.door_is_locked",
@@ -31,18 +31,8 @@
     },
 
     {
-      "id": "dialogue.intro",
-      "mode": "minimal",
-      "lines": [ { "speaker": "character.paranoik", "text": "Опять этот офис." } ]
-    },
-    {
-      "id": "dialogue.door_unlocked",
-      "mode": "minimal",
-      "lines": [ { "speaker": "character.paranoik", "text": "Замок щёлкнул. Дверь открыта." } ]
-    },
-    {
       "id": "dialogue.trinity",
-      "mode": "vn",
+      "mode": "normal",
       "lines": [
         { "speaker": "character.trinity", "text": "Ты ведь чувствуешь это?" },
         { "speaker": "character.paranoik", "text": "Что именно?" },
@@ -57,7 +47,7 @@
       "triggers": [ { "type": "location_entered", "location": "location.office" } ],
       "launch_condition": { "target": "story.office", "property": "intro_done", "operator": "equals", "value": false },
       "actions": [
-        { "action": "dialogue", "dialogue": "dialogue.intro" },
+        { "action": "say", "speaker": "character.paranoik", "text": "Опять этот офис." },
         { "action": "set_state", "target": "story.office", "property": "intro_done", "value": true }
       ]
     },
@@ -82,8 +72,7 @@
       "actions": [
         { "action": "set_state", "target": "object.office_door", "property": "locked", "value": false },
         { "action": "inventory", "item": "item.key", "to": "consumed" },
-        { "action": "clear_selection" },
-        { "action": "dialogue", "dialogue": "dialogue.door_unlocked" }
+        { "action": "clear_selection" }
       ]
     },
 
@@ -122,7 +111,7 @@
     },
     {
       "id": "dialogue.trinity_after_morpheus",
-      "mode": "vn",
+      "mode": "normal",
       "lines": [
         { "speaker": "character.trinity", "text": "Ты его видел. По глазам вижу." },
         { "speaker": "character.paranoik", "text": "Он сказал, что всё это — не настоящее." }
@@ -130,7 +119,18 @@
     },
 
     { "id": "response.door_locked", "tier": "specific", "interaction": "exit", "target": "object.office_door", "condition": { "ref": "condition.door_is_locked" }, "text": "Заперто." },
-    { "id": "response.window", "tier": "specific", "interaction": "primary", "target": "object.office_window", "text": "За окном всегда один и тот же дождь." },
-    { "id": "response.inspect_window", "tier": "specific", "interaction": "inspect", "target": "object.office_window", "text": "Капли ползут по стеклу слишком ровно." }
+    { "id": "response.poster", "tier": "specific", "interaction": "primary", "target": "object.office_poster", "text": "Паутина из шестиугольников. Не помню, когда я её повесил." },
+    {
+      "id": "response.inspect_poster",
+      "tier": "specific",
+      "interaction": "inspect",
+      "target": "object.office_poster",
+      "lines": [
+        "Линии сходятся в центре, как будто там кто-то сидит.",
+        "Если долго смотреть, шестиугольники начинают шевелиться."
+      ]
+    },
+    { "id": "response.poster_stub_1", "tier": "generic", "interaction": "inspect", "target": "object.office_poster", "text": "Просто постер." },
+    { "id": "response.poster_stub_2", "tier": "generic", "interaction": "inspect", "target": "object.office_poster", "text": "Хватит на него пялиться." }
   ]
 }

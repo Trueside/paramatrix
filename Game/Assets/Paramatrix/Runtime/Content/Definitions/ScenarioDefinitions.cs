@@ -216,6 +216,24 @@ namespace Paramatrix.Content
         public override bool IsAsync => true;
     }
 
+    /// <summary>
+    /// A monologue line (Р10): the speaker's bubble appears and the event goes on at once — it never waits for the line
+    /// and holds no control because of it.
+    /// </summary>
+    public sealed class SayAction : ActionDefinition
+    {
+        public SayAction(EntityId speaker, string text, SourceLocation source)
+            : base(source)
+        {
+            Speaker = speaker;
+            Text = text ?? throw new ArgumentNullException(nameof(text));
+        }
+
+        public EntityId Speaker { get; }
+
+        public string Text { get; }
+    }
+
     /// <summary>Walks a character to the approach point of an entity's representation.</summary>
     public sealed class MoveAction : ActionDefinition
     {
@@ -300,41 +318,113 @@ namespace Paramatrix.Content
         public IReadOnlyList<ActionDefinition> Actions { get; }
     }
 
+    /// <summary>
+    /// How a dialogue definition is presented (Р10). Monologue lines are not dialogue definitions:
+    /// they are <see cref="SayAction"/> and responses.
+    /// </summary>
     public enum DialogueMode
     {
-        Minimal = 1,
-        VisualNovel,
+        /// <summary>Conversation: the world pauses, avatar with an emotion, comic bubble, no name.</summary>
+        Normal = 1,
+
+        /// <summary>
+        /// Novel (Р12): a romantic conversation with one partner — the location's backdrop dreamy and blurred, the partner's
+        /// large picture by emotion in the middle, lines and choices in a panel with the speaker's name.
+        /// </summary>
+        Novel,
     }
 
-    public sealed class DialogueLine
+    /// <summary>One step of a dialogue: a line, or a choice of the hero's answer (Р12).</summary>
+    public abstract class DialogueStep
     {
-        public DialogueLine(EntityId speaker, string text, SourceLocation source)
+        protected DialogueStep(SourceLocation source) => Source = source;
+
+        public SourceLocation Source { get; }
+    }
+
+    /// <summary>Where a choice's option leads after its own lines (Р12).</summary>
+    public enum DialogueOptionExit
+    {
+        /// <summary>Back to the dialogue after the choice.</summary>
+        Continue = 1,
+
+        /// <summary>The dialogue ends here.</summary>
+        End,
+
+        /// <summary>The conversation goes on in another dialogue (e.g. into a novel) without returning.</summary>
+        Next,
+    }
+
+    /// <summary>One answer of a choice: the player sees only its label; its lines say what the hero and others say.</summary>
+    public sealed class DialogueOption
+    {
+        public DialogueOption(string label, IEnumerable<DialogueStep> steps, DialogueOptionExit exit, EntityId? next, SourceLocation source)
+        {
+            Label = label ?? throw new ArgumentNullException(nameof(label));
+            Steps = new ReadOnlyCollection<DialogueStep>(new List<DialogueStep>(steps));
+            Exit = exit;
+            Next = exit == DialogueOptionExit.Next ? next ?? throw new ArgumentException("A Next option needs a dialogue.", nameof(next)) : (EntityId?)null;
+            Source = source;
+        }
+
+        public string Label { get; }
+
+        public IReadOnlyList<DialogueStep> Steps { get; }
+
+        public DialogueOptionExit Exit { get; }
+
+        public EntityId? Next { get; }
+
+        public SourceLocation Source { get; }
+    }
+
+    /// <summary>The hero's choice: numbered options, exactly one is taken, no way back (Р12).</summary>
+    public sealed class DialogueChoice : DialogueStep
+    {
+        public DialogueChoice(IEnumerable<DialogueOption> options, SourceLocation source)
+            : base(source) => Options = new ReadOnlyCollection<DialogueOption>(new List<DialogueOption>(options));
+
+        public IReadOnlyList<DialogueOption> Options { get; }
+    }
+
+    public sealed class DialogueLine : DialogueStep
+    {
+        public DialogueLine(EntityId speaker, string text, string emotion, SourceLocation source)
+            : base(source)
         {
             Speaker = speaker;
             Text = text ?? throw new ArgumentNullException(nameof(text));
-            Source = source;
+            Emotion = emotion ?? throw new ArgumentNullException(nameof(emotion));
         }
 
         public EntityId Speaker { get; }
 
         public string Text { get; }
 
-        public SourceLocation Source { get; }
+        /// <summary>Emotion of the speaker (avatar, or the novel picture); <see cref="Emotions.Default"/> when the line names none.</summary>
+        public string Emotion { get; }
     }
 
-    /// <summary>Linear dialogue (Architecture 0.3 §2). Presentation mode is chosen by content.</summary>
+    /// <summary>
+    /// A dialogue (Architecture 0.3 §2, Р10, Р12): lines and the hero's choices, whose options lead into short branches.
+    /// Presentation mode is chosen by content; a novel names its <see cref="Partner"/>.
+    /// </summary>
     public sealed class DialogueDefinition : Definition
     {
-        public DialogueDefinition(EntityId id, SourceLocation source, DialogueMode mode, IEnumerable<DialogueLine> lines)
+        public DialogueDefinition(EntityId id, SourceLocation source, DialogueMode mode, EntityId? partner, IEnumerable<DialogueStep> steps)
             : base(id, source)
         {
             Mode = mode;
-            Lines = new ReadOnlyCollection<DialogueLine>(new List<DialogueLine>(lines));
+            Partner = partner;
+            Steps = new ReadOnlyCollection<DialogueStep>(new List<DialogueStep>(steps));
         }
 
         public DialogueMode Mode { get; }
 
-        public IReadOnlyList<DialogueLine> Lines { get; }
+        /// <summary>Novel only: the character the hero talks to, shown large in the middle of the screen.</summary>
+        public EntityId? Partner { get; }
+
+        public IReadOnlyList<DialogueStep> Steps { get; }
     }
 
     /// <summary>Resolution levels of a player action without a matching event (Architecture 0.3 §2.5, §5.6; Р6).</summary>
@@ -346,7 +436,11 @@ namespace Paramatrix.Content
         Fallback,
     }
 
-    /// <summary>A one-line reaction without actions (Р6).</summary>
+    /// <summary>
+    /// A reaction without actions (Р6), shown as a monologue (Р10): it never takes control.
+    /// Declared with <c>text</c> it is said every time; declared with <c>lines</c> it is a prepared monologue:
+    /// one line per player action, in order, each once, then the response no longer matches.
+    /// </summary>
     public sealed class ResponseDefinition : Definition
     {
         public ResponseDefinition(
@@ -358,7 +452,8 @@ namespace Paramatrix.Content
             EntityId? item,
             ConditionNode condition,
             EntityId? speaker,
-            string text)
+            IEnumerable<string> lines,
+            bool isPrepared)
             : base(id, source)
         {
             Tier = tier;
@@ -367,14 +462,24 @@ namespace Paramatrix.Content
             Item = item;
             Condition = condition;
             Speaker = speaker;
-            Text = text;
+            Lines = new ReadOnlyCollection<string>(new List<string>(lines ?? throw new ArgumentNullException(nameof(lines))));
+            IsPrepared = isPrepared;
+            if (isPrepared && Lines.Count == 0)
+            {
+                throw new ArgumentException("A prepared monologue needs at least one line.", nameof(lines));
+            }
+
+            if (!isPrepared && Lines.Count > 1)
+            {
+                throw new ArgumentException("Only a prepared monologue has several lines.", nameof(lines));
+            }
         }
 
         public ResponseTier Tier { get; }
 
         public InteractionType Interaction { get; }
 
-        /// <summary>Required for Specific, absent otherwise.</summary>
+        /// <summary>Required for Specific; optional for Generic (the target's own pool); absent otherwise.</summary>
         public EntityId? Target { get; }
 
         public EntityId? Item { get; }
@@ -384,9 +489,12 @@ namespace Paramatrix.Content
         /// <summary>Null: the player character, or the target for <c>talk</c>.</summary>
         public EntityId? Speaker { get; }
 
-        /// <summary>Null only for a fallback declared as "no reaction".</summary>
-        public string Text { get; }
+        /// <summary>One line for <c>text</c>, all lines of a prepared monologue, empty for "no reaction".</summary>
+        public IReadOnlyList<string> Lines { get; }
 
-        public bool IsNoReaction => Text == null;
+        /// <summary>Declared with <c>lines</c>: spoken once through, progress is saved.</summary>
+        public bool IsPrepared { get; }
+
+        public bool IsNoReaction => Lines.Count == 0;
     }
 }

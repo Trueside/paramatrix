@@ -46,7 +46,7 @@
 **T12. Что значит левый клик по объекту.** У каждой интерактивной сущности в JSON поле `primary_interaction` — тип взаимодействия для левого клика: `talk` у персонажа, `take` у предмета, `exit` у двери-выхода, `use` у устройства, `primary` в остальных случаях. Правый клик — всегда `inspect`.
 *Пример:* левый клик по Тринити → `talk`; по ключу на столе → `take`; по двери коридора → `exit`.
 
-**T13. Подход к объекту.** Перед любым взаимодействием, кроме `inspect`, герой идёт к точке подхода объекта (её задаёт Unity-представление). Сигнал взаимодействия уходит в Scenario только по прибытии. Пока герой идёт, игрок может отменить действие клавишами движения — тогда сигнала нет.
+**T13. Подход к объекту.** ~~Перед взаимодействием герой идёт к точке подхода.~~ Отменено решением Р11 (`IP_0_1_Decisions.md`): игрок водит героя сам, ЛКМ срабатывает только в радиусе героя, ПКМ — с любого расстояния; точка подхода — только для действия `move`.
 *Пример:* клик по двери в другом конце офиса → герой идёт → дошёл → сцена «выход». Нажал «влево» по дороге → герой остановился, ничего не произошло.
 
 **T14. Встроенные свойства «где находится».**
@@ -123,7 +123,7 @@ Paramatrix.Unity.Editor валидация контента и сцен, drawer 
 | `story` | сюжетная веха | да | — |
 | `condition` | именованное условие | нет | `condition` |
 | `event` | сцена | нет | `execution`, `repeat`, `triggers`, `actions` |
-| `dialogue` | диалог | нет | `mode`, `lines` |
+| `dialogue` | разговор (обычный режим, Р10) | нет | `mode`, `lines` |
 | `response` | реакция | нет | `tier`, `interaction`, текст или `none` |
 
 Тип сущности — из префикса ID, отдельного поля нет. Стартовая локация = `initial_location` героя.
@@ -156,10 +156,10 @@ Paramatrix.Unity.Editor валидация контента и сцен, drawer 
 { "id": "condition.door_is_locked",
   "condition": { "target": "object.office_door", "property": "locked", "operator": "equals", "value": true } }
 
-{ "id": "dialogue.morpheus_intro", "mode": "vn",
+{ "id": "dialogue.morpheus_intro", "mode": "normal",
   "lines": [
     { "speaker": "character.morpheus", "text": "Я ждал тебя." },
-    { "speaker": "character.paranoik", "text": "Кто вы?" }
+    { "speaker": "character.paranoik", "text": "Кто вы?", "emotion": "smirk" }
   ] }
 
 { "id": "event.office_exit", "execution": "exclusive", "repeat": "repeatable",
@@ -207,7 +207,9 @@ Actions:
 
 Trigger types: `interaction`, `item_acquired`, `state_changed`, `location_entered`, `dialogue_completed`, `event_completed`, `conditions_met`.
 
-Реакция (`response`): `tier`; `interaction`; `target` (обязателен для `specific`, запрещён для остальных); `condition` (необязателен; у `fallback` запрещён); `item` (для `apply_item`/`combine_items`); `speaker` (по умолчанию — герой; для `talk` по умолчанию — цель); `text` или `none: true` (только у `fallback`).
+Реакция (`response`): `tier`; `interaction`; `target` (обязателен для `specific`, необязателен для `generic` — свой пул заглушек цели, запрещён для остальных); `condition` (необязателен; у `fallback` запрещён); `item` (для `apply_item`/`combine_items`); `speaker` (по умолчанию — герой; для `talk` по умолчанию — цель); ровно одно из: `text` (говорится каждый раз), `lines` (заготовленный монолог, только `specific`/`contextual`: по фразе за действие, каждая один раз, прогресс в сохранении), `none: true` (только у `fallback`). Реакция показывается монологом (Р10).
+
+Эмоция словаря (`emotion.<имя>`): `name` — русское название; имя ID — имя файла аватара. Персонаж: `emotions` — эмоции аватаров (необязательно; если есть — уникальные, из словаря, среди них `default`). Реплика разговора: `emotion` (по умолчанию `default`; говорящий обязан объявить `emotions`). Действие `say`: `speaker`, `text` — монолог из сцены, сцена его не ждёт (в background запрещено).
 
 ### Validator
 
@@ -220,8 +222,8 @@ Trigger types: `interaction`, `item_acquired`, `state_changed`, `location_entere
 | Настройки | ровно одна `game.settings`; `player_character` — существующий персонаж |
 | Встроенные | `initial_location` — существующая локация или `none`; `initial_holder` — допустимое значение `holder`; встроенные свойства нельзя объявить в `states` |
 | Interaction | `primary_interaction` из списка 0.3 §5.2; trigger `interaction` с типом, требующим предмет, без `item` — ошибка |
-| Dialogue | `mode` ∈ {`minimal`, `vn`}; `lines` непуст; `speaker` — существующий персонаж |
-| Responses | правила полей по `tier`; ровно один `fallback` на каждый тип взаимодействия; пул `generic` для типа — 0 или ≥ 2 реакций; две реакции `specific` с одинаковыми `interaction`+`target` и без `condition` — ошибка |
+| Dialogue | `mode` = `normal` или `novel` (`minimal`/`vn` — ошибка, Р10, Р12); `lines` непуст; шаг — реплика или `choice` (2–9 вариантов: `label`, необязательные `lines`, `end: true` или `next` — существующий диалог); `speaker` — существующий персонаж с `emotions`; `emotion` объявлена у говорящего; новелла — `partner` (персонаж, не герой), говорят только герой и `partner`; у обычного диалога `partner` нет |
+| Responses | правила полей по `tier`; ровно один `fallback` на каждый тип взаимодействия; пул `generic` из одной фразы допустим (Р10); две реакции `specific` с одинаковыми `interaction`+`target` и без `condition` — ошибка |
 | Actions | `inventory.to` — допустимое значение; `move.character` — персонаж; `transition.location` — локация |
 | Location | `scene` непуст |
 
@@ -302,7 +304,7 @@ public sealed class GameFlow : IGameFlowPort
 
 ### Interaction
 
-Получает от Unity-слоя «клик по сущности X кнопкой Y» (и выбранный предмет из Inventory) → определяет тип (T12) → если нужен подход — `MoveTo(hero, X)` в режиме Free Roam (T13) → по прибытии `ScenarioRuntime.Submit(Interaction)` → `Pump()`. Проверяет `Permissions.Interact`; клик без разрешения игнорируется (ввод заблокирован владельцем — это не ошибка).
+Получает от Unity-слоя «клик по сущности X кнопкой Y» (и выбранный предмет из Inventory) → определяет тип (T12) → ЛКМ: цель вне радиуса героя — ничего (Р11); сцена — герой останавливается и поворачивается к цели → `ScenarioRuntime.Submit(Interaction)` → `Pump()`. Проверяет `Permissions.Interact`; клик без разрешения игнорируется (ввод заблокирован владельцем — это не ошибка).
 
 ### Inventory
 
@@ -348,7 +350,7 @@ Load Game: … → Scenario.Start → SaveService.Load → Location.LoadTechnica
 | `EntityView` и наследники `CharacterView`, `ItemView`, `ObjectView` | `[SerializeField] entityId`; hitbox; точка подхода; клипы анимаций; видимость по `location`/`holder` |
 | `EntryPoint` | именованная точка входа в сцене локации, одна помечена «по умолчанию» |
 | `RepresentationRegistry` | ID → представления; неизвестный ID при регистрации — Error; обновление по `Changed`, перестройка по `Restored` и после загрузки сцены |
-| `HeroController` | ходьба по линии пола (клавиатура, T19), `MoveTo` для подхода и сцен |
+| `HeroController` | ходьба по линии пола (клавиатура, T19), радиус взаимодействия (Р11), `MoveTo` для сцен |
 | `InputRouter` | Input System → клики и движение → `Interaction`/`HeroController` с учётом `Permissions` |
 | `DialogueView` | Minimalistic — реплика над говорящим (world-space), VN — панель с именем; продвижение кликом/Space; без пропуска всего диалога |
 | `InventoryView` | иконки, панель описания по наведению, закреплённый выбор |

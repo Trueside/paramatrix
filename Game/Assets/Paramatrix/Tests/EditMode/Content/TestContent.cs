@@ -14,7 +14,7 @@ namespace Paramatrix.Tests.Content
         public const string Settings = "{ 'id': 'game.settings', 'player_character': 'character.paranoik' }";
 
         public const string Hero =
-            "{ 'id': 'character.paranoik', 'name': 'Параноик', 'initial_location': 'location.office', 'primary_interaction': 'talk' }";
+            "{ 'id': 'character.paranoik', 'name': 'Параноик', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': ['default', 'smirk'] }";
 
         public const string Office = "{ 'id': 'location.office', 'scene': 'Location_Office' }";
 
@@ -34,9 +34,18 @@ namespace Paramatrix.Tests.Content
         public static string File(params string[] definitions) =>
             "{ 'format_version': 1, 'definitions': [ " + string.Join(", ", definitions) + " ] }";
 
+        /// <summary>The emotion dictionary of the tests (Р10): characters may declare only these.</summary>
+        public static readonly string[] EmotionDictionary =
+        {
+            "{ 'id': 'emotion.default', 'name': 'Обычное' }",
+            "{ 'id': 'emotion.smirk', 'name': 'Ухмылка' }",
+            "{ 'id': 'emotion.angry', 'name': 'Злость' }",
+        };
+
         public static ContentSource Base() => new ContentSource("base.json", File(Settings, Hero, Office));
 
-        public static ContentSource FallbackSource() => new ContentSource("fallbacks.json", File(Fallbacks));
+        /// <summary>What every test content needs besides its own definitions: fallbacks (Р6) and the emotion dictionary (Р10).</summary>
+        public static ContentSource FallbackSource() => new ContentSource("fallbacks.json", File(Fallbacks.Concat(EmotionDictionary).ToArray()));
 
         public static ContentLoadResult Load(params string[] definitions) =>
             ContentLoader.Load(new[] { Base(), FallbackSource(), new ContentSource("test.json", File(definitions)) });

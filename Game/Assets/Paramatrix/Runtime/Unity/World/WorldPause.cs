@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Paramatrix.Unity
 {
     /// <summary>
-    /// VN dialogue pauses the world (Architecture 0.3 §2.2, T16): walking and world animations use scaled time and
-    /// stop; UI and Scenario do not depend on time. Minimalistic dialogue keeps the world running.
+    /// A conversation pauses the world (Architecture 0.3 §2.2, Р10, T16): walking and world animations use scaled time
+    /// and stop; UI and Scenario do not depend on time. Monologues keep the world running.
     /// </summary>
     public sealed class WorldPause : MonoBehaviour
     {
@@ -20,7 +20,7 @@ namespace Paramatrix.Unity
             Apply();
         }
 
-        private void Apply() => Time.timeScale = _flow.Presentation == DialoguePresentation.VisualNovel ? 0f : 1f;
+        private void Apply() => Time.timeScale = _flow.Presentation == DialoguePresentation.None ? 1f : 0f;
 
         private void OnDestroy()
         {

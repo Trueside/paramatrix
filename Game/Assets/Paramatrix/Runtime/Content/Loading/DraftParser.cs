@@ -40,6 +40,9 @@ namespace Paramatrix.Content
                 case EntityKind.Event:
                     draft = ParseEventHeader(reader, id);
                     break;
+                case EntityKind.Emotion:
+                    draft = ParseEmotion(reader, id);
+                    break;
                 case EntityKind.Dialogue:
                 case EntityKind.Response:
                     // Parsed entirely by the linker, which also reports their unknown fields.
@@ -101,6 +104,18 @@ namespace Paramatrix.Content
             return draft;
         }
 
+        /// <summary>A dictionary emotion: its ID name is the avatar file name, 'name' is how authors call it.</summary>
+        private static Draft ParseEmotion(JsonObjectReader reader, EntityId id)
+        {
+            if (!Emotions.IsValidName(id.Name))
+            {
+                reader.Diagnostics.Error(DiagnosticCode.InvalidEmotion, reader.LocationOf(reader.Object["id"]),
+                    $"Emotion '{id.Name}' is not a valid name: lowercase Latin letters, digits and '_', starting with a letter.");
+            }
+
+            return new EmotionDraft(id, reader.Location) { Name = ReadText(reader, "name") };
+        }
+
         private static Draft ParseNamedCondition(JsonObjectReader reader, EntityId id)
         {
             var token = reader.Required("condition");
@@ -148,6 +163,7 @@ namespace Paramatrix.Content
                     draft.Name = ReadText(reader, "name");
                     draft.PrimaryInteraction = ReadPrimaryInteraction(reader);
                     ReadInitialPlace(reader, draft, "initial_location");
+                    ReadEmotions(reader, draft);
                     break;
                 case EntityKind.Item:
                     draft.Name = ReadText(reader, "name");
@@ -197,6 +213,47 @@ namespace Paramatrix.Content
             }
 
             return text;
+        }
+
+        /// <summary>Optional avatar emotions (Р10): unique valid names, <c>default</c> among them.</summary>
+        private static void ReadEmotions(JsonObjectReader reader, WorldDraft draft)
+        {
+            var array = reader.OptionalArray("emotions", out var present);
+            if (!present || array == null)
+            {
+                return;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var token in array)
+            {
+                if (!reader.ReadString(token, "emotions", out var name))
+                {
+                    continue;
+                }
+
+                if (!Emotions.IsValidName(name))
+                {
+                    reader.Diagnostics.Error(DiagnosticCode.InvalidEmotion, reader.LocationOf(token),
+                        $"Emotion '{name}' is not a valid name: lowercase Latin letters, digits and '_', starting with a letter.");
+                    continue;
+                }
+
+                if (!seen.Add(name))
+                {
+                    reader.Diagnostics.Error(DiagnosticCode.DuplicateEmotion, reader.LocationOf(token), $"Emotion '{name}' is declared twice.");
+                    continue;
+                }
+
+                draft.Emotions.Add(name);
+                draft.EmotionSources.Add(reader.LocationOf(token));
+            }
+
+            if (!seen.Contains(Emotions.Default))
+            {
+                reader.Diagnostics.Error(DiagnosticCode.MissingDefaultEmotion, reader.LocationOf(array),
+                    $"Emotions of {draft.Id} must include '{Emotions.Default}': it is used by every line that names no emotion.");
+            }
         }
 
         private static InteractionType ReadPrimaryInteraction(JsonObjectReader reader)

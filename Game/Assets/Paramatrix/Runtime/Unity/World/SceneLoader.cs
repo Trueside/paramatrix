@@ -15,14 +15,16 @@ namespace Paramatrix.Unity
     public sealed class SceneLoader : ISceneLoader
     {
         private readonly HeroController _hero;
+        private readonly WorldCamera _camera;
         private ContentRegistry _content;
         private RepresentationRegistry _representations;
         private string _currentScene;
         private bool _busy;
 
-        public SceneLoader(HeroController hero)
+        public SceneLoader(HeroController hero, WorldCamera camera)
         {
-            _hero = hero;
+            _hero = hero ?? throw new ArgumentNullException(nameof(hero));
+            _camera = camera ?? throw new ArgumentNullException(nameof(camera));
         }
 
         public string CurrentScene => _currentScene;
@@ -123,7 +125,8 @@ namespace Paramatrix.Unity
                 return false;
             }
 
-            _hero.EnterScene(structure.Root, chosen.transform.position.x);
+            _hero.EnterScene(structure.Root, chosen);
+            _camera.EnterScene(structure.Root, structure.Layers, _hero.transform);
             error = null;
             return true;
         }

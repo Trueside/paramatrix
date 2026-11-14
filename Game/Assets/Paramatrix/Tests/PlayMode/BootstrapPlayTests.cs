@@ -35,15 +35,13 @@ namespace Paramatrix.PlayTests
         [UnityTest]
         public IEnumerator NewGameLoadsOfficeAndPlaysIntro()
         {
-            Assert.That(_game.Scenes.CurrentScene, Is.EqualTo("Location_Office"));
-            Assert.That(_game.Hero.X, Is.EqualTo(-5f).Within(0.01f), "default entry point");
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.True, "intro line shown");
-            Assert.That(_game.DialogueView.CurrentLine.Value.Text, Is.EqualTo("Опять этот офис."));
-
-            _game.Input.AdvanceDialogue();
             yield return null;
+            Assert.That(_game.Scenes.CurrentScene, Is.EqualTo("Location_Office"));
+            Assert.That(_game.Hero.X, Is.EqualTo(-6f).Within(0.01f), "default entry point");
 
-            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False);
+            // The intro thought is a monologue (Р10): a bubble over the hero, and the player has control at once.
+            Assert.That(_game.DialogueView.MonologueText(Hero), Is.EqualTo("Опять этот офис."));
+            Assert.That(_game.DialogueView.CurrentLine.HasValue, Is.False, "no conversation");
             Assert.That(_game.Session.Flow.Owner, Is.EqualTo(ControlOwner.Player));
             Assert.That(Errors(), Is.Empty);
         }
@@ -67,19 +65,27 @@ namespace Paramatrix.PlayTests
                 _game.Input.Walk(-1f, 0.1f);
             }
 
-            Assert.That(_game.Hero.X, Is.EqualTo(-8f).Within(0.01f), "clamped to the floor");
+            Assert.That(_game.Hero.X, Is.EqualTo(-9f).Within(0.01f), "clamped to the floor");
         }
 
         [UnityTest]
-        public IEnumerator ClickOnWindowReachesScenario()
+        public IEnumerator ClickOnPosterReachesScenario()
         {
             yield return FinishIntro();
 
-            _game.Input.ClickAt(ViewPosition("object.office_window"), PointerButton.Primary);
-            yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "response after the approach");
+            // Out of the hero's reach a left click does nothing, and he does not walk (Р11).
+            _game.Hero.Walker.PlaceAt(PixelGrid.Units(400));
+            var before = _game.DialogueView.MonologueText(Hero); // the intro thought may still be shown
+            _game.Input.ClickAt(ViewPosition("object.office_poster"), PointerButton.Primary);
+            yield return null;
+            Assert.That(_game.DialogueView.MonologueText(Hero), Is.EqualTo(before), "too far: nothing happens");
+            Assert.That(_game.Hero.X, Is.EqualTo(PixelGrid.Units(400)).Within(0.01f), "no walk to the target");
 
-            Assert.That(_game.DialogueView.CurrentLine.Value.Text, Is.EqualTo("За окном всегда один и тот же дождь."));
-            Assert.That(_game.Hero.X, Is.EqualTo(0f).Within(0.05f), "walked to the approach point first");
+            // Within reach the response answers as a monologue (Р10).
+            _game.StandBy("object.office_poster");
+            _game.Input.ClickAt(ViewPosition("object.office_poster"), PointerButton.Primary);
+            yield return null;
+            Assert.That(_game.DialogueView.MonologueText(Hero), Is.EqualTo("Паутина из шестиугольников. Не помню, когда я её повесил."));
             Assert.That(Errors(), Is.Empty);
         }
 
@@ -95,7 +101,7 @@ namespace Paramatrix.PlayTests
 
             _game.Input.ClickAt(trinity, PointerButton.Primary);
             yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "Trinity dialogue");
-            Assert.That(_game.DialogueView.CurrentLine.Value.SpeakerName, Is.EqualTo("Тринити"));
+            Assert.That(_game.DialogueView.CurrentLine.Value.Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
         }
 
         [UnityTest]
@@ -116,12 +122,13 @@ namespace Paramatrix.PlayTests
         public IEnumerator RightClickInspectsWithoutWalking()
         {
             yield return FinishIntro();
+            _game.Hero.Walker.PlaceAt(PixelGrid.Units(400)); // far from the poster: a right click works from any distance
             var start = _game.Hero.X;
 
-            _game.Input.ClickAt(ViewPosition("object.office_window"), PointerButton.Secondary);
+            _game.Input.ClickAt(ViewPosition("object.office_poster"), PointerButton.Secondary);
             yield return null;
 
-            Assert.That(_game.DialogueView.CurrentLine.Value.Text, Is.EqualTo("Капли ползут по стеклу слишком ровно."));
+            Assert.That(_game.DialogueView.MonologueText(Hero), Is.EqualTo("Линии сходятся в центре, как будто там кто-то сидит."));
             Assert.That(_game.Hero.X, Is.EqualTo(start).Within(0.01f));
         }
 
@@ -130,17 +137,17 @@ namespace Paramatrix.PlayTests
         {
             yield return FinishIntro();
 
+            _game.StandBy("item.key");
             _game.Input.ClickAt(ViewPosition("item.key"), PointerButton.Primary);
             yield return WaitUntil(() => _game.Session.Inventory.IsCarried(EntityId.Parse("item.key")), "key taken");
             yield return WaitUntil(() => _game.Session.Flow.Owner == ControlOwner.Player, "take scene finished");
             Assert.That(_game.Representations.Find(EntityId.Parse("item.key")).IsShown, Is.False, "key left the world");
 
             _game.Session.Interaction.ClickInventoryItem(EntityId.Parse("item.key"), PointerButton.Primary);
+            _game.StandBy("object.office_door");
             _game.Input.ClickAt(ViewPosition("object.office_door"), PointerButton.Primary);
             yield return WaitUntil(() => !_game.Session.State.Get(StateAddress.Parse("object.office_door", "locked")).AsBoolean, "door unlocked");
-            yield return WaitUntil(() => _game.DialogueView.CurrentLine.HasValue, "unlock line");
-            Assert.That(_game.DialogueView.CurrentLine.Value.Text, Is.EqualTo("Замок щёлкнул. Дверь открыта."));
-            yield return FinishIntro();
+            Assert.That(_game.Session.Inventory.IsCarried(EntityId.Parse("item.key")), Is.False, "the key is used up");
             yield return WaitUntil(() => _game.Session.Flow.Owner == ControlOwner.Player, "unlock scene finished");
 
             // Record what the player would see at every Game Flow change during the transition.
@@ -168,10 +175,10 @@ namespace Paramatrix.PlayTests
 
             Assert.That(transitionSeen, Is.True);
             Assert.That(coveredDuringTransition, Is.True, "the screen is covered for the whole transition");
-            Assert.That(heroXWhenUncovered, Is.EqualTo(-6f).Within(0.01f), "the hero is at the entry point before the cover is lifted");
+            Assert.That(heroXWhenUncovered, Is.EqualTo(-7f).Within(0.01f), "the hero is at the entry point before the cover is lifted");
             Assert.That(_game.TransitionCurtain.IsShown, Is.False);
             Assert.That(_game.Session.Location.CurrentLocation.Value, Is.EqualTo("location.corridor"));
-            Assert.That(_game.Hero.X, Is.EqualTo(-6f).Within(0.01f), "entry point from_office");
+            Assert.That(_game.Hero.X, Is.EqualTo(-7f).Within(0.01f), "entry point from_office");
             Assert.That(_game.Representations.Find(EntityId.Parse("object.office_door")), Is.Null, "office views unregistered");
             Assert.That(Errors(), Is.Empty);
         }
@@ -187,11 +194,13 @@ namespace Paramatrix.PlayTests
             }
         }
 
+        private static readonly EntityId Hero = EntityId.Parse("character.paranoik");
+
         private Vector2 ViewPosition(string id)
         {
             var view = _game.Representations.Find(EntityId.Parse(id));
             Assert.That(view, Is.Not.Null, id + " has no representation");
-            return view.transform.position;
+            return view.GetComponentInChildren<SpriteRenderer>().bounds.center; // the middle of the click area, as a player clicks
         }
 
         private string[] Errors() =>

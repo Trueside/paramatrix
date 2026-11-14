@@ -20,6 +20,7 @@ namespace Paramatrix.Unity.Editor
                 case string text: property.stringValue = text; break;
                 case bool flag: property.boolValue = flag; break;
                 case float number: property.floatValue = number; break;
+                case int number: property.intValue = number; break; // also enum fields, by underlying value
                 case Object reference: property.objectReferenceValue = reference; break;
                 case null: property.objectReferenceValue = null; break;
                 default: throw new System.ArgumentException($"Unsupported value for '{field}'.");

@@ -50,12 +50,22 @@ namespace Paramatrix.Content
             DialogueMode mode = 0;
             if (reader.RequiredString("mode", out var modeName))
             {
+                var at = reader.LocationOf(reader.Object["mode"]);
                 switch (modeName)
                 {
-                    case "minimal": mode = DialogueMode.Minimal; break;
-                    case "vn": mode = DialogueMode.VisualNovel; break;
+                    case "normal":
+                        mode = DialogueMode.Normal;
+                        break;
+                    case "novel":
+                        mode = DialogueMode.Novel;
+                        break;
+                    case "minimal":
+                        _diagnostics.Error(DiagnosticCode.InvalidDialogueMode, at,
+                            "Monologues are not dialogues: a scene says a line with the 'say' action, a click on a target gets a response (Р10).");
+                        valid = false;
+                        break;
                     default:
-                        _diagnostics.Error(DiagnosticCode.InvalidDialogueMode, reader.LocationOf(reader.Object["mode"]), $"Dialogue mode '{modeName}' is not supported; use minimal or vn.");
+                        _diagnostics.Error(DiagnosticCode.InvalidDialogueMode, at, $"Dialogue mode '{modeName}' is not supported; use normal or novel.");
                         valid = false;
                         break;
                 }
@@ -65,29 +75,180 @@ namespace Paramatrix.Content
                 valid = false;
             }
 
-            var lines = new List<DialogueLine>();
-            var array = reader.RequiredArray("lines");
-            if (array == null)
+            // A novel is a conversation with one partner, shown large; a normal dialogue has none (Р12).
+            EntityId? partner = null;
+            var partnerToken = reader.Optional("partner");
+            if (mode == DialogueMode.Novel)
             {
-                valid = false;
-            }
-            else if (array.Count == 0)
-            {
-                _diagnostics.Error(DiagnosticCode.EmptyDialogue, reader.LocationOf(array), "Dialogue must have at least one line.");
-                valid = false;
-            }
-            else
-            {
-                foreach (var token in array)
+                valid &= ReadRef(reader, "partner", true, out var partnerId, EntityKind.Character);
+                partner = partnerId.IsValid ? partnerId : (EntityId?)null;
+                if (partner == _player)
                 {
-                    var line = ResolveLine(token, draft.SourceName);
-                    valid &= line != null;
-                    lines.Add(line);
+                    _diagnostics.Error(DiagnosticCode.InvalidDialoguePartner, reader.LocationOf(partnerToken), "A novel's partner is the one the hero talks to, not the hero.");
+                    valid = false;
                 }
+            }
+            else if (partnerToken != null)
+            {
+                _diagnostics.Error(DiagnosticCode.InvalidDialoguePartner, reader.LocationOf(partnerToken), "Only a novel dialogue has a 'partner'.");
+                valid = false;
+            }
+
+            var steps = ResolveSteps(reader, "lines", true, draft.SourceName, ref valid);
+            if (valid && mode == DialogueMode.Novel && partner.HasValue)
+            {
+                valid &= CheckNovelSpeakers(steps, partner.Value);
             }
 
             reader.ReportUnknownFields();
-            return valid ? new DialogueDefinition(draft.Id, draft.Source, mode, lines) : null;
+            return valid ? new DialogueDefinition(draft.Id, draft.Source, mode, partner, steps) : null;
+        }
+
+        /// <summary>The steps of a dialogue or of a choice's option: lines, and choices (an object with 'choice').</summary>
+        private List<DialogueStep> ResolveSteps(JsonObjectReader reader, string field, bool required, string source, ref bool valid)
+        {
+            var steps = new List<DialogueStep>();
+            JArray array;
+            if (required)
+            {
+                array = reader.RequiredArray(field);
+                if (array == null)
+                {
+                    valid = false;
+                    return steps;
+                }
+
+                if (array.Count == 0)
+                {
+                    _diagnostics.Error(DiagnosticCode.EmptyDialogue, reader.LocationOf(array), "Dialogue must have at least one line.");
+                    valid = false;
+                    return steps;
+                }
+            }
+            else
+            {
+                array = reader.OptionalArray(field, out var present);
+                if (!present)
+                {
+                    return steps;
+                }
+
+                if (array == null)
+                {
+                    valid = false;
+                    return steps;
+                }
+            }
+
+            foreach (var token in array)
+            {
+                DialogueStep step = token is JObject obj && obj.ContainsKey("choice")
+                    ? (DialogueStep)ResolveChoice(token, source)
+                    : ResolveLine(token, source);
+                valid &= step != null;
+                steps.Add(step);
+            }
+
+            return steps;
+        }
+
+        /// <summary>A choice of 2 to 9 numbered options (a key per option); each option leads on, ends, or goes to another dialogue.</summary>
+        private DialogueChoice ResolveChoice(JToken token, string source)
+        {
+            var reader = JsonObjectReader.ForObject(token, source, _diagnostics, "Dialogue choice");
+            var array = reader.RequiredArray("choice");
+            reader.ReportUnknownFields();
+            if (array == null)
+            {
+                return null;
+            }
+
+            if (array.Count < 2 || array.Count > 9)
+            {
+                _diagnostics.Error(DiagnosticCode.InvalidChoice, reader.LocationOf(array),
+                    $"A choice has {array.Count} option(s); it needs 2 to 9 (one key each). A single answer is a line, not a choice.");
+                return null;
+            }
+
+            var valid = true;
+            var options = new List<DialogueOption>();
+            foreach (var optionToken in array)
+            {
+                var option = ResolveOption(optionToken, source);
+                valid &= option != null;
+                options.Add(option);
+            }
+
+            return valid ? new DialogueChoice(options, reader.Location) : null;
+        }
+
+        private DialogueOption ResolveOption(JToken token, string source)
+        {
+            var reader = JsonObjectReader.ForObject(token, source, _diagnostics, "Choice option");
+            if (reader == null)
+            {
+                return null;
+            }
+
+            var label = ReadText(reader, "label", true);
+            var valid = label != null;
+            var steps = ResolveSteps(reader, "lines", false, source, ref valid);
+
+            var exit = DialogueOptionExit.Continue;
+            EntityId? next = null;
+            var endToken = reader.Optional("end");
+            if (endToken != null)
+            {
+                if (endToken.Type != JTokenType.Boolean || !endToken.Value<bool>())
+                {
+                    _diagnostics.Error(DiagnosticCode.InvalidChoice, reader.LocationOf(endToken), "'end' is written only as true: the option ends the dialogue.");
+                    valid = false;
+                }
+
+                exit = DialogueOptionExit.End;
+            }
+
+            if (reader.Has("next"))
+            {
+                if (endToken != null)
+                {
+                    _diagnostics.Error(DiagnosticCode.InvalidChoice, reader.Location, "An option either ends the dialogue ('end') or goes on in another ('next'), not both.");
+                    valid = false;
+                }
+
+                valid &= ReadRef(reader, "next", true, out var nextId, EntityKind.Dialogue);
+                exit = DialogueOptionExit.Next;
+                next = nextId.IsValid ? nextId : (EntityId?)null;
+            }
+
+            reader.ReportUnknownFields();
+            return valid ? new DialogueOption(label, steps, exit, next, reader.Location) : null;
+        }
+
+        /// <summary>In a novel only the hero and the partner speak: the partner's picture is the one on screen (Р12).</summary>
+        private bool CheckNovelSpeakers(IEnumerable<DialogueStep> steps, EntityId partner)
+        {
+            var valid = true;
+            foreach (var step in steps)
+            {
+                switch (step)
+                {
+                    case DialogueLine line when line.Speaker != partner && line.Speaker != _player:
+                        _diagnostics.Error(DiagnosticCode.InvalidDialoguePartner, line.Source,
+                            $"{line.Speaker} speaks in a novel with {partner}: only the hero and the partner speak there.");
+                        valid = false;
+                        break;
+                    case DialogueChoice choice:
+                        foreach (var option in choice.Options)
+                        {
+                            valid &= CheckNovelSpeakers(option.Steps, partner);
+                        }
+
+                        break;
+                }
+            }
+
+            return valid;
         }
 
         private DialogueLine ResolveLine(JToken token, string source)
@@ -101,8 +262,34 @@ namespace Paramatrix.Content
             var valid = ReadRef(reader, "speaker", true, out var speaker, EntityKind.Character);
             var text = ReadText(reader, "text", true);
             valid &= text != null;
+
+            var emotion = Emotions.Default;
+            var emotionToken = reader.Optional("emotion");
+            if (emotionToken != null)
+            {
+                valid &= reader.ReadString(emotionToken, "emotion", out emotion);
+            }
+
+            // The avatar must exist in content: the speaker declares its emotions (Р10).
+            if (speaker.IsValid && emotion != null && _drafts.TryGetValue(speaker, out var draft) && draft is WorldDraft character)
+            {
+                var at = emotionToken != null ? reader.LocationOf(emotionToken) : reader.Location;
+                if (character.Emotions.Count == 0)
+                {
+                    _diagnostics.Error(DiagnosticCode.SpeakerWithoutAvatars, at,
+                        $"{speaker} speaks in a conversation but declares no 'emotions': it has no avatar to show.");
+                    valid = false;
+                }
+                else if (!character.Emotions.Contains(emotion))
+                {
+                    _diagnostics.Error(DiagnosticCode.UnknownEmotion, at,
+                        $"{speaker} has no emotion '{emotion}'; declared: {string.Join(", ", character.Emotions)}.");
+                    valid = false;
+                }
+            }
+
             reader.ReportUnknownFields();
-            return valid ? new DialogueLine(speaker, text, reader.Location) : null;
+            return valid ? new DialogueLine(speaker, text, emotion, reader.Location) : null;
         }
 
         // ================= responses =================
@@ -135,16 +322,16 @@ namespace Paramatrix.Content
 
             valid &= ReadInteraction(reader, out var interaction);
 
-            // target: required for specific, not allowed for the other tiers.
+            // target: required for specific, optional for generic (the target's own stub pool, Р10), not allowed otherwise.
             EntityId? target = null;
-            if (tier == ResponseTier.Specific)
+            if (tier == ResponseTier.Specific || tier == ResponseTier.Generic)
             {
-                valid &= ReadRef(reader, "target", true, out var id, InteractableKinds);
+                valid &= ReadRef(reader, "target", tier == ResponseTier.Specific, out var id, InteractableKinds);
                 target = id.IsValid ? id : (EntityId?)null;
             }
             else if (tier != 0)
             {
-                valid &= NotApplicable(reader, "target", "Field 'target' applies only to specific responses.");
+                valid &= NotApplicable(reader, "target", "Field 'target' applies only to specific and generic responses.");
             }
             else
             {
@@ -182,21 +369,28 @@ namespace Paramatrix.Content
 
             valid &= ReadRef(reader, "speaker", false, out var speakerId, EntityKind.Character);
 
-            // text XOR none:true; none only for fallback.
-            string text = null;
+            // Exactly one of: text (said every time), lines (prepared monologue, Р10), none: true (fallback only).
+            var lines = new List<string>();
             var hasText = reader.Has("text");
+            var hasLines = reader.Has("lines");
             var hasNone = reader.Has("none");
-            if (hasText == hasNone)
+            if ((hasText ? 1 : 0) + (hasLines ? 1 : 0) + (hasNone ? 1 : 0) != 1)
             {
-                _diagnostics.Error(DiagnosticCode.InvalidResponseText, reader.Location, "A response needs exactly one of 'text' or 'none': true.");
+                _diagnostics.Error(DiagnosticCode.InvalidResponseText, reader.Location, "A response needs exactly one of 'text', 'lines' or 'none': true.");
                 reader.Optional("text");
+                reader.Optional("lines");
                 reader.Optional("none");
                 valid = false;
             }
             else if (hasText)
             {
-                text = ReadText(reader, "text", true);
+                var text = ReadText(reader, "text", true);
                 valid &= text != null;
+                lines.Add(text);
+            }
+            else if (hasLines)
+            {
+                valid &= ReadPreparedLines(reader, tier, lines);
             }
             else
             {
@@ -227,19 +421,64 @@ namespace Paramatrix.Content
                 item,
                 condition,
                 speakerId.IsValid ? speakerId : (EntityId?)null,
-                text);
+                lines,
+                hasLines);
+        }
+
+        /// <summary>A prepared monologue: one or more non-empty lines; only specific and contextual responses have one.</summary>
+        private bool ReadPreparedLines(JsonObjectReader reader, ResponseTier tier, List<string> into)
+        {
+            var array = reader.RequiredArray("lines");
+            if (array == null)
+            {
+                return false;
+            }
+
+            var valid = true;
+            if (tier == ResponseTier.Generic || tier == ResponseTier.Fallback)
+            {
+                _diagnostics.Error(DiagnosticCode.InvalidResponseText, reader.LocationOf(array),
+                    "Only specific and contextual responses can be prepared monologues ('lines'); stubs and fallbacks use 'text'.");
+                valid = false;
+            }
+
+            if (array.Count == 0)
+            {
+                _diagnostics.Error(DiagnosticCode.InvalidResponseText, reader.LocationOf(array), "A prepared monologue needs at least one line.");
+                return false;
+            }
+
+            foreach (var token in array)
+            {
+                if (!reader.ReadString(token, "lines", out var line))
+                {
+                    valid = false;
+                    continue;
+                }
+
+                if (line.Trim().Length == 0)
+                {
+                    _diagnostics.Error(DiagnosticCode.EmptyText, reader.LocationOf(token), "A monologue line must not be empty.");
+                    valid = false;
+                    continue;
+                }
+
+                into.Add(line);
+            }
+
+            return valid;
         }
 
         /// <summary>
-        /// Rules over the whole set of responses (Р6): exactly one fallback per interaction type,
-        /// a generic pool of 0 or ≥ 2 responses, no two unconditional responses that would always collide.
+        /// Rules over the whole set of responses (Р6, Р10): exactly one fallback per interaction type,
+        /// no two unconditional responses that would always collide. A stub pool of one is allowed: the "…" that
+        /// closes every round keeps the same stub from repeating back to back.
         /// </summary>
         public void CheckResponseSet(IReadOnlyList<ResponseDefinition> responses, SourceLocation settingsSource)
         {
             foreach (var type in InteractionTypes.All)
             {
                 ResponseDefinition fallback = null;
-                var generic = new List<ResponseDefinition>();
                 foreach (var response in responses)
                 {
                     if (response.Interaction != type)
@@ -261,10 +500,6 @@ namespace Paramatrix.Content
                             fallback = response;
                         }
                     }
-                    else if (response.Tier == ResponseTier.Generic)
-                    {
-                        generic.Add(response);
-                    }
                 }
 
                 if (fallback == null)
@@ -273,14 +508,6 @@ namespace Paramatrix.Content
                         DiagnosticCode.MissingFallbackResponse,
                         settingsSource,
                         $"Interaction '{InteractionTypes.Name(type)}' has no fallback response; declare one (text or none: true).");
-                }
-
-                if (generic.Count == 1)
-                {
-                    _diagnostics.Error(
-                        DiagnosticCode.GenericPoolTooSmall,
-                        generic[0].Source,
-                        $"Generic pool of '{InteractionTypes.Name(type)}' has one response; it cannot rotate without repeating. Add another or remove it.");
                 }
             }
 
@@ -583,6 +810,13 @@ namespace Paramatrix.Content
                     result = new DialogueAction(dialogue, location);
                     break;
 
+                case "say":
+                    valid &= ReadRef(reader, "speaker", true, out var speaker, EntityKind.Character);
+                    var said = ReadText(reader, "text", true);
+                    valid &= said != null;
+                    result = said == null ? null : new SayAction(speaker, said, location);
+                    break;
+
                 case "move":
                     valid &= ReadRef(reader, "character", true, out var character, EntityKind.Character);
                     valid &= ReadRef(reader, "to", true, out var destination, InteractableKinds);
@@ -612,12 +846,12 @@ namespace Paramatrix.Content
                     _diagnostics.Error(
                         DiagnosticCode.InvalidActionType,
                         reader.LocationOf(reader.Object["action"]),
-                        $"Action '{name}' is not supported; use set_state, if, end, call, start, inventory, clear_selection, dialogue, move, animation or transition.");
+                        $"Action '{name}' is not supported; use set_state, if, end, call, start, inventory, clear_selection, dialogue, say, move, animation or transition.");
                     return null;
             }
 
             if (owner.ExecutionType == ExecutionType.Background
-                && (result is DialogueAction || result is MoveAction || result is AnimationAction || result is TransitionAction || result is ClearSelectionAction))
+                && (result is DialogueAction || result is SayAction || result is MoveAction || result is AnimationAction || result is TransitionAction || result is ClearSelectionAction))
             {
                 _diagnostics.Error(
                     DiagnosticCode.BackgroundActionNotAllowed,

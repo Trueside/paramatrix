@@ -12,11 +12,11 @@
       "condition": { "target": "story.morpheus_meeting", "property": "occurred", "operator": "equals", "value": true }
     },
 
-    { "id": "character.morpheus", "name": "Морфеус", "initial_location": "location.corridor", "primary_interaction": "talk" },
+    { "id": "character.morpheus", "name": "Морфеус", "initial_location": "location.corridor", "primary_interaction": "talk", "emotions": ["default"] },
 
     {
       "id": "dialogue.morpheus",
-      "mode": "vn",
+      "mode": "normal",
       "lines": [
         { "speaker": "character.morpheus", "text": "Я ждал тебя." },
         { "speaker": "character.paranoik", "text": "Мы знакомы?" },

@@ -14,7 +14,7 @@ namespace Paramatrix.Tests.Content
             "  'power':  { 'type': 'integer', 'default': 0, 'min': 0, 'max': 3, 'persistence': 'persistent', 'mutation_policy': 'system_only' } } }";
 
         private const string Trinity =
-            "{ 'id': 'character.trinity', 'name': 'Тринити', 'initial_location': 'location.office', 'primary_interaction': 'talk' }";
+            "{ 'id': 'character.trinity', 'name': 'Тринити', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': ['default', 'angry'] }";
 
         private const string Key = "{ 'id': 'item.key', 'name': 'Ключ', 'description': 'Латунный.', 'initial_holder': 'location.office' }";
 
@@ -26,7 +26,7 @@ namespace Paramatrix.Tests.Content
             "{ 'id': 'condition.door_is_locked', 'condition': { 'target': 'object.office_door', 'property': 'locked', 'operator': 'equals', 'value': true } }";
 
         private const string LockedDialogue =
-            "{ 'id': 'dialogue.door_locked', 'mode': 'minimal', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'Заперто.' } ] }";
+            "{ 'id': 'dialogue.door_locked', 'mode': 'normal', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'Заперто.' } ] }";
 
         private static readonly string[] World = { Door, Trinity, Key, Note, Corridor, Locked, LockedDialogue };
 
@@ -148,13 +148,71 @@ namespace Paramatrix.Tests.Content
         public void DialogueLoads()
         {
             var registry = Valid(
-                "{ 'id': 'dialogue.morpheus_intro', 'mode': 'vn', 'lines': [" +
-                "  { 'speaker': 'character.trinity', 'text': 'Я ждала тебя.' }, { 'speaker': 'character.paranoik', 'text': 'Кто вы?' } ] }");
+                "{ 'id': 'dialogue.morpheus_intro', 'mode': 'normal', 'lines': [" +
+                "  { 'speaker': 'character.trinity', 'text': 'Я ждала тебя.' }, { 'speaker': 'character.paranoik', 'text': 'Кто вы?', 'emotion': 'smirk' } ] }");
 
             var dialogue = registry.Get<DialogueDefinition>(EntityId.Parse("dialogue.morpheus_intro"));
-            Assert.That(dialogue.Mode, Is.EqualTo(DialogueMode.VisualNovel));
-            Assert.That(dialogue.Lines.Select(l => l.Text), Is.EqualTo(new[] { "Я ждала тебя.", "Кто вы?" }));
-            Assert.That(dialogue.Lines[0].Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
+            Assert.That(dialogue.Mode, Is.EqualTo(DialogueMode.Normal));
+            var lines = dialogue.Steps.Cast<DialogueLine>().ToList();
+            Assert.That(lines.Select(l => l.Text), Is.EqualTo(new[] { "Я ждала тебя.", "Кто вы?" }));
+            Assert.That(lines[0].Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
+            Assert.That(lines.Select(l => l.Emotion), Is.EqualTo(new[] { "default", "smirk" }), "no emotion means default");
+        }
+
+        private const string Novel =
+            "{ 'id': 'dialogue.novel', 'mode': 'novel', 'partner': 'character.trinity', 'lines': [ { 'speaker': 'character.trinity', 'text': 'Ближе.', 'emotion': 'angry' } ] }";
+
+        private static string WithChoice(string options) =>
+            "{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.trinity', 'text': 'Ну?' }, { 'choice': [ " + options + " ] } ] }";
+
+        [Test]
+        public void ChoicesAndTheirBranchesLoad()
+        {
+            var registry = Valid(Novel, WithChoice(
+                "{ 'label': 'Да', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'Да, давно хотел.' } ], 'next': 'dialogue.novel' }, " +
+                "{ 'label': 'Подумать', 'lines': [ { 'choice': [ { 'label': 'А', 'end': true }, { 'label': 'Б' } ] } ] }, " +
+                "{ 'label': 'Уйти', 'end': true }"));
+
+            var dialogue = registry.Get<DialogueDefinition>(EntityId.Parse("dialogue.x"));
+            var choice = (DialogueChoice)dialogue.Steps[1];
+            Assert.That(choice.Options.Select(o => o.Label), Is.EqualTo(new[] { "Да", "Подумать", "Уйти" }));
+            Assert.That(choice.Options.Select(o => o.Exit), Is.EqualTo(new[] { DialogueOptionExit.Next, DialogueOptionExit.Continue, DialogueOptionExit.End }));
+            Assert.That(choice.Options[0].Next, Is.EqualTo(EntityId.Parse("dialogue.novel")));
+            Assert.That(((DialogueLine)choice.Options[0].Steps[0]).Text, Is.EqualTo("Да, давно хотел."));
+            Assert.That(choice.Options[1].Steps[0], Is.InstanceOf<DialogueChoice>(), "a branch may hold its own choice");
+            Assert.That(choice.Options[2].Steps, Is.Empty, "an option without lines");
+
+            var novel = registry.Get<DialogueDefinition>(EntityId.Parse("dialogue.novel"));
+            Assert.That(novel.Mode, Is.EqualTo(DialogueMode.Novel));
+            Assert.That(novel.Partner, Is.EqualTo(EntityId.Parse("character.trinity")));
+        }
+
+        [TestCase("{ 'label': 'Один' }")]
+        [TestCase("{ 'label': '1' }, { 'label': '2' }, { 'label': '3' }, { 'label': '4' }, { 'label': '5' }, { 'label': '6' }, { 'label': '7' }, { 'label': '8' }, { 'label': '9' }, { 'label': '10' }")]
+        [TestCase("{ 'label': 'А', 'end': true, 'next': 'dialogue.door_locked' }, { 'label': 'Б' }")]
+        [TestCase("{ 'label': 'А', 'end': false }, { 'label': 'Б' }")]
+        public void AChoiceHasTwoToNineOptionsEachWithOneWayOut(string options) =>
+            AssertErrors(With(WithChoice(options)), DiagnosticCode.InvalidChoice);
+
+        [Test]
+        public void AnOptionNeedsALabelAndAKnownNextDialogue()
+        {
+            AssertErrors(With(WithChoice("{ 'label': '' }, { 'label': 'Б' }")), DiagnosticCode.EmptyText);
+            AssertErrors(With(WithChoice("{ 'label': 'А', 'next': 'dialogue.nowhere' }, { 'label': 'Б' }")), DiagnosticCode.UnknownReference);
+        }
+
+        [Test]
+        public void ANovelHasOnePartnerWhoSpeaksWithTheHero()
+        {
+            AssertErrors(With("{ 'id': 'dialogue.n', 'mode': 'novel', 'lines': [ { 'speaker': 'character.trinity', 'text': 'А.' } ] }"), DiagnosticCode.MissingRequiredField);
+            AssertErrors(With("{ 'id': 'dialogue.n', 'mode': 'novel', 'partner': 'character.paranoik', 'lines': [ { 'speaker': 'character.trinity', 'text': 'А.' } ] }"),
+                DiagnosticCode.InvalidDialoguePartner);
+            AssertErrors(With("{ 'id': 'dialogue.n', 'mode': 'novel', 'partner': 'character.trinity', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.' }, " +
+                "{ 'choice': [ { 'label': 'А', 'lines': [ { 'speaker': 'character.bystander', 'text': 'Б.' } ] }, { 'label': 'Б' } ] } ] }",
+                "{ 'id': 'character.bystander', 'name': 'Прохожий', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': ['default'] }"),
+                DiagnosticCode.InvalidDialoguePartner);
+            AssertErrors(With("{ 'id': 'dialogue.n', 'mode': 'normal', 'partner': 'character.trinity', 'lines': [ { 'speaker': 'character.trinity', 'text': 'А.' } ] }"),
+                DiagnosticCode.InvalidDialoguePartner);
         }
 
         [Test]
@@ -384,6 +442,7 @@ namespace Paramatrix.Tests.Content
         [TestCase("{ 'action': 'animation', 'target': 'object.office_door', 'clip': 'shake' }")]
         [TestCase("{ 'action': 'transition', 'location': 'location.corridor' }")]
         [TestCase("{ 'action': 'clear_selection' }")]
+        [TestCase("{ 'action': 'say', 'speaker': 'character.paranoik', 'text': 'А.' }")]
         public void BackgroundCannotWaitOrTakeControl(string action) =>
             AssertErrors(With(Background(action)), DiagnosticCode.BackgroundActionNotAllowed);
 
@@ -440,27 +499,83 @@ namespace Paramatrix.Tests.Content
             AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'bubble', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.' } ] }"), DiagnosticCode.InvalidDialogueMode);
 
         [Test]
-        public void DialogueNeedsLines() => AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'lines': [] }"), DiagnosticCode.EmptyDialogue);
+        public void DialogueNeedsLines() => AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [] }"), DiagnosticCode.EmptyDialogue);
 
         [Test]
         public void SpeakerMustExist() =>
-            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'lines': [ { 'speaker': 'character.neo', 'text': 'А.' } ] }"), DiagnosticCode.UnknownReference);
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.neo', 'text': 'А.' } ] }"), DiagnosticCode.UnknownReference);
 
         [Test]
         public void SpeakerMustBeCharacter() =>
-            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'lines': [ { 'speaker': 'object.office_door', 'text': 'А.' } ] }"), DiagnosticCode.InvalidReferenceKind);
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'object.office_door', 'text': 'А.' } ] }"), DiagnosticCode.InvalidReferenceKind);
 
         [Test]
         public void LineTextMustNotBeEmpty() =>
-            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'lines': [ { 'speaker': 'character.paranoik', 'text': '' } ] }"), DiagnosticCode.EmptyText);
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.paranoik', 'text': '' } ] }"), DiagnosticCode.EmptyText);
 
         [Test]
         public void UnknownLineField() =>
-            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.', 'emotion': 'sad' } ] }"), DiagnosticCode.UnknownField);
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.', 'mood': 'sad' } ] }"), DiagnosticCode.UnknownField);
+
+        [TestCase("minimal", DiagnosticCode.InvalidDialogueMode)]
+        [TestCase("vn", DiagnosticCode.InvalidDialogueMode)]
+        public void OnlyNormalAndNovelDialoguesExist(string mode, DiagnosticCode code) =>
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': '" + mode + "', 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.' } ] }"), code);
+
+        [Test]
+        public void LineEmotionMustBeDeclared() =>
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.trinity', 'text': 'А.', 'emotion': 'smirk' } ] }"), DiagnosticCode.UnknownEmotion);
+
+        [Test]
+        public void SpeakerWithoutEmotionsCannotTalk() =>
+            AssertErrors(With(
+                "{ 'id': 'character.neo', 'name': 'Нео', 'initial_location': 'location.office', 'primary_interaction': 'talk' }",
+                "{ 'id': 'dialogue.x', 'mode': 'normal', 'lines': [ { 'speaker': 'character.neo', 'text': 'А.' } ] }"),
+                DiagnosticCode.SpeakerWithoutAvatars);
+
+        [TestCase("['smirk']", DiagnosticCode.MissingDefaultEmotion)]
+        [TestCase("['default', 'default']", DiagnosticCode.DuplicateEmotion)]
+        [TestCase("['default', 'Smirk']", DiagnosticCode.InvalidEmotion)]
+        [TestCase("['default', '2x']", DiagnosticCode.InvalidEmotion)]
+        public void EmotionsAreValidated(string emotions, DiagnosticCode code) =>
+            AssertErrors(With("{ 'id': 'character.neo', 'name': 'Нео', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': " + emotions + " }"), code);
+
+        [Test]
+        public void CharacterEmotionMustBeInTheDictionary() =>
+            AssertErrors(With("{ 'id': 'character.neo', 'name': 'Нео', 'initial_location': 'location.office', 'primary_interaction': 'talk', 'emotions': ['default', 'smrik'] }"),
+                DiagnosticCode.UnknownEmotion);
+
+        [Test]
+        public void DictionaryEmotionLoads() =>
+            Assert.That(Valid().Get<EmotionDefinition>(EntityId.Parse("emotion.smirk")).Name, Is.EqualTo("Ухмылка"));
+
+        [TestCase("{ 'id': 'emotion.sad' }", DiagnosticCode.MissingRequiredField)]
+        [TestCase("{ 'id': 'emotion.2x', 'name': 'Два' }", DiagnosticCode.InvalidEmotion)]
+        [TestCase("{ 'id': 'emotion.sad', 'name': 'Грусть', 'color': 'blue' }", DiagnosticCode.UnknownField)]
+        public void DictionaryEmotionIsValidated(string definition, DiagnosticCode code) => AssertErrors(With(definition), code);
+
+        [Test]
+        public void EmotionsAreSorted() =>
+            Assert.That(Valid().Get<CharacterDefinition>(EntityId.Parse("character.trinity")).Emotions, Is.EqualTo(new[] { "angry", "default" }));
+
+        [Test]
+        public void SayActionLoads()
+        {
+            var registry = Valid(Exclusive("{ 'action': 'say', 'speaker': 'character.trinity', 'text': 'Смотри.' }"));
+            var say = (SayAction)registry.Get<EventDefinition>(EntityId.Parse("event.test")).Actions[0];
+            Assert.That(say.Speaker, Is.EqualTo(EntityId.Parse("character.trinity")));
+            Assert.That(say.Text, Is.EqualTo("Смотри."));
+            Assert.That(say.IsAsync, Is.False, "a scene never waits for a monologue");
+        }
+
+        [TestCase("{ 'action': 'say', 'text': 'А.' }", DiagnosticCode.MissingRequiredField)]
+        [TestCase("{ 'action': 'say', 'speaker': 'object.office_door', 'text': 'А.' }", DiagnosticCode.InvalidReferenceKind)]
+        [TestCase("{ 'action': 'say', 'speaker': 'character.trinity', 'text': ' ' }", DiagnosticCode.EmptyText)]
+        public void SayActionIsValidated(string action, DiagnosticCode code) => AssertErrors(With(Exclusive(action)), code);
 
         [Test]
         public void UnknownDialogueField() =>
-            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'vn', 'skippable': true, 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.' } ] }"), DiagnosticCode.UnknownField);
+            AssertErrors(With("{ 'id': 'dialogue.x', 'mode': 'normal', 'skippable': true, 'lines': [ { 'speaker': 'character.paranoik', 'text': 'А.' } ] }"), DiagnosticCode.UnknownField);
 
         // ================= responses =================
 
@@ -473,10 +588,29 @@ namespace Paramatrix.Tests.Content
             AssertErrors(With("{ 'id': 'response.x', 'tier': 'specific', 'interaction': 'primary', 'text': 'А.' }"), DiagnosticCode.MissingRequiredField);
 
         [TestCase("contextual")]
-        [TestCase("generic")]
         [TestCase("fallback")]
-        public void OnlySpecificHasTarget(string tier) =>
+        public void OnlySpecificAndGenericHaveTarget(string tier) =>
             AssertErrors(With("{ 'id': 'response.x', 'tier': '" + tier + "', 'interaction': 'primary', 'target': 'object.office_door', 'text': 'А.' }"), DiagnosticCode.FilterNotApplicable);
+
+        [Test]
+        public void GenericWithTargetIsAnOwnStub() =>
+            Assert.That(Valid("{ 'id': 'response.x', 'tier': 'generic', 'interaction': 'primary', 'target': 'object.office_door', 'text': 'А.' }")
+                .Get<ResponseDefinition>(EntityId.Parse("response.x")).Target, Is.EqualTo(EntityId.Parse("object.office_door")));
+
+        [Test]
+        public void PreparedMonologueLoads()
+        {
+            var response = Valid("{ 'id': 'response.x', 'tier': 'specific', 'interaction': 'inspect', 'target': 'character.trinity', 'lines': [ 'Раз.', 'Два.' ] }")
+                .Get<ResponseDefinition>(EntityId.Parse("response.x"));
+            Assert.That(response.IsPrepared, Is.True);
+            Assert.That(response.Lines, Is.EqualTo(new[] { "Раз.", "Два." }));
+        }
+
+        [TestCase("specific", "'target': 'object.office_door', 'lines': []", DiagnosticCode.InvalidResponseText)]
+        [TestCase("specific", "'target': 'object.office_door', 'lines': [ 'А.', '' ]", DiagnosticCode.EmptyText)]
+        [TestCase("generic", "'lines': [ 'А.' ]", DiagnosticCode.InvalidResponseText)]
+        public void PreparedMonologueIsValidated(string tier, string body, DiagnosticCode code) =>
+            AssertErrors(With("{ 'id': 'response.x', 'tier': '" + tier + "', 'interaction': 'primary', " + body + " }"), code);
 
         [Test]
         public void FallbackHasNoCondition() =>
@@ -488,8 +622,9 @@ namespace Paramatrix.Tests.Content
             AssertErrors(With("{ 'id': 'response.x', 'tier': 'specific', 'interaction': 'take', 'target': 'item.key', 'item': 'item.note', 'text': 'А.' }"), DiagnosticCode.FilterNotApplicable);
 
         [TestCase("'text': 'А.', 'none': true")]
+        [TestCase("'text': 'А.', 'lines': [ 'Б.' ]")]
         [TestCase("'speaker': 'character.paranoik'")]
-        public void ResponseNeedsExactlyTextOrNone(string body) =>
+        public void ResponseNeedsExactlyTextLinesOrNone(string body) =>
             AssertErrors(With("{ 'id': 'response.x', 'tier': 'specific', 'interaction': 'primary', 'target': 'object.office_door', " + body + " }"), DiagnosticCode.InvalidResponseText);
 
         [Test]
@@ -518,8 +653,9 @@ namespace Paramatrix.Tests.Content
             AssertErrors(With("{ 'id': 'response.another_take', 'tier': 'fallback', 'interaction': 'take', 'text': 'Нет.' }"), DiagnosticCode.DuplicateFallbackResponse);
 
         [Test]
-        public void GenericPoolOfOneIsRejected() =>
-            AssertErrors(With("{ 'id': 'response.hm', 'tier': 'generic', 'interaction': 'primary', 'text': 'Хм.' }"), DiagnosticCode.GenericPoolTooSmall);
+        public void GenericPoolOfOneIsAllowed() =>
+            Assert.That(With("{ 'id': 'response.hm', 'tier': 'generic', 'interaction': 'primary', 'text': 'Хм.' }").Succeeded, Is.True,
+                "the closing '…' keeps a single stub from repeating back to back (Р10)");
 
         [Test]
         public void UnconditionalDuplicatesAreRejected() =>
@@ -543,6 +679,7 @@ namespace Paramatrix.Tests.Content
             var fallbacks = Fallbacks
                 .Select(f => f.Contains("'interaction': '" + interaction + "'") ? replacement : f)
                 .Where(f => f != null)
+                .Concat(EmotionDictionary)
                 .ToArray();
             return ContentLoader.Load(new[] { Base(), new ContentSource("fallbacks.json", File(fallbacks)) });
         }

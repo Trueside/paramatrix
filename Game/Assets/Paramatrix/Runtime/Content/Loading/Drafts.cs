@@ -55,10 +55,26 @@ namespace Paramatrix.Content
 
         public string Scene { get; set; }
 
+        /// <summary>Character: valid declared avatar emotions (Р10); empty when none are declared.</summary>
+        public List<string> Emotions { get; } = new List<string>();
+
+        public List<SourceLocation> EmotionSources { get; } = new List<SourceLocation>();
+
         /// <summary>Character: "none" or a location ID. Item: "inventory", "consumed", a location or a character ID.</summary>
         public string InitialPlace { get; set; }
 
         public SourceLocation InitialPlaceSource { get; set; }
+    }
+
+    /// <summary>A dictionary emotion (Р10).</summary>
+    internal sealed class EmotionDraft : Draft
+    {
+        public EmotionDraft(EntityId id, SourceLocation source)
+            : base(id, source)
+        {
+        }
+
+        public string Name { get; set; }
     }
 
     internal sealed class StateDraft

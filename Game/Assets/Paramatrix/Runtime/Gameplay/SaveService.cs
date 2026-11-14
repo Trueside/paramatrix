@@ -27,7 +27,8 @@ namespace Paramatrix.Gameplay
     /// </summary>
     public sealed class SaveService
     {
-        public const int FormatVersion = 1;
+        /// <summary>2: the scenario part holds the progress of prepared monologues (Р10).</summary>
+        public const int FormatVersion = 2;
 
         private readonly ContentRegistry _registry;
         private readonly StateSystem _state;
@@ -167,7 +168,17 @@ namespace Paramatrix.Gameplay
                 });
             }
 
-            return new JObject { ["visit"] = snapshot.CurrentVisit, ["events"] = events };
+            var monologues = new JArray();
+            foreach (var record in snapshot.Monologues)
+            {
+                monologues.Add(new JObject
+                {
+                    ["response"] = record.Response.Value,
+                    ["spoken"] = record.Spoken,
+                });
+            }
+
+            return new JObject { ["visit"] = snapshot.CurrentVisit, ["events"] = events, ["monologues"] = monologues };
         }
 
         private void Parse(string json, SourceLocation location, DiagnosticBag errors, out StateSnapshot state, out ScenarioSnapshot scenario)
@@ -245,7 +256,8 @@ namespace Paramatrix.Gameplay
 
         private static ScenarioSnapshot ParseScenario(JObject obj, SourceLocation location, DiagnosticBag errors)
         {
-            if (obj == null || !(obj["visit"] is JValue visit) || visit.Type != JTokenType.Integer || !(obj["events"] is JArray events))
+            if (obj == null || !(obj["visit"] is JValue visit) || visit.Type != JTokenType.Integer || !(obj["events"] is JArray events)
+                || !(obj["monologues"] is JArray spoken))
             {
                 errors.Error(DiagnosticCode.SaveFileInvalid, location, "Save has no valid 'scenario' object.");
                 return null;
@@ -266,7 +278,21 @@ namespace Paramatrix.Gameplay
                 records.Add(new EventRecord(eventId, record["completed"].Value<bool>(), record["last_visit"].Value<int>()));
             }
 
-            return new ScenarioSnapshot(visit.Value<int>(), records);
+            var monologues = new List<MonologueRecord>();
+            foreach (var token in spoken)
+            {
+                var record = token as JObject;
+                var id = record?["response"]?.Type == JTokenType.String ? record["response"].Value<string>() : null;
+                if (id == null || record["spoken"]?.Type != JTokenType.Integer || !EntityId.TryParse(id, out var responseId, out _))
+                {
+                    errors.Error(DiagnosticCode.SaveFileInvalid, location, $"Malformed monologue record: {token.ToString(Formatting.None)}");
+                    continue;
+                }
+
+                monologues.Add(new MonologueRecord(responseId, record["spoken"].Value<int>()));
+            }
+
+            return new ScenarioSnapshot(visit.Value<int>(), records, monologues);
         }
 
         private static SaveLoadResult Fail(DiagnosticCode code, SourceLocation location, string message) =>

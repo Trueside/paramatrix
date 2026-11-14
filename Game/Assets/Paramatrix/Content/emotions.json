@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "definitions": [
+    { "id": "emotion.default", "name": "Обычное (спокойное лицо; реплика без эмоции)" },
+    { "id": "emotion.smile", "name": "Улыбка" },
+    { "id": "emotion.laugh", "name": "Смех" },
+    { "id": "emotion.smirk", "name": "Ухмылка" },
+    { "id": "emotion.happy", "name": "Радость" },
+    { "id": "emotion.sad", "name": "Грусть" },
+    { "id": "emotion.angry", "name": "Злость" },
+    { "id": "emotion.annoyed", "name": "Раздражение" },
+    { "id": "emotion.surprised", "name": "Удивление" },
+    { "id": "emotion.shocked", "name": "Шок" },
+    { "id": "emotion.scared", "name": "Страх" },
+    { "id": "emotion.worried", "name": "Тревога" },
+    { "id": "emotion.suspicious", "name": "Подозрение" },
+    { "id": "emotion.confused", "name": "Растерянность" },
+    { "id": "emotion.thoughtful", "name": "Задумчивость" },
+    { "id": "emotion.serious", "name": "Серьёзность" },
+    { "id": "emotion.embarrassed", "name": "Смущение" },
+    { "id": "emotion.tired", "name": "Усталость" },
+    { "id": "emotion.disgusted", "name": "Отвращение" },
+    { "id": "emotion.determined", "name": "Решимость" }
+  ]
+}

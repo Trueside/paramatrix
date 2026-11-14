@@ -200,6 +200,7 @@ namespace Paramatrix.Tests.Scenario
             Event("event.broken", "exclusive", "repeatable", OnClick("inspect", "object.window"), Dialogue("dialogue.hello")),
             Event("event.intro", "exclusive", "once", "{ 'type': 'location_entered' }," + "{ 'type': 'state_changed', 'target': 'story.flags', 'property': 'x' }", SetFlag("x", true)),
             Watcher(),
+            "{ 'id': 'response.window_thoughts', 'tier': 'specific', 'interaction': 'take', 'target': 'object.window', 'lines': [ 'Раз.', 'Два.', 'Три.' ] }",
         };
 
         private static ScenarioHarness Played()
@@ -209,6 +210,7 @@ namespace Paramatrix.Tests.Scenario
             h.Click(InteractionType.Primary, "object.window");              // once completes
             h.Click(InteractionType.Inspect, "object.window");
             h.Complete(OperationOutcome.Failed);                             // broken fails
+            h.Click(InteractionType.Take, "object.window");                 // one line of the prepared monologue
             h.SetSystem("story.flags", "a", StateValue.Boolean(true));
             h.SetSystem("story.flags", "b", StateValue.Boolean(true));       // watcher fired, condition true now
             Assert.That(h.Runtime.CanSave, Is.True);
@@ -238,6 +240,17 @@ namespace Paramatrix.Tests.Scenario
             Assert.That(loaded.Status("event.once"), Is.EqualTo(EventStatus.Completed));
             Assert.That(loaded.Status("event.broken"), Is.EqualTo(EventStatus.Idle), "Failed is not saved (Р3)");
             loaded.AssertNoDiagnostics();
+        }
+
+        [Test]
+        public void MonologueProgressSurvivesLoad()
+        {
+            var loaded = Load(Played());
+            Assert.That(loaded.Runtime.SpokenLines(EntityId.Parse("response.window_thoughts")), Is.EqualTo(1));
+
+            loaded.Click(InteractionType.Take, "object.window");
+
+            Assert.That(loaded.TakeLog(), Is.EqualTo(new[] { "say:character.paranoik:Два." }));
         }
 
         [Test]
@@ -317,21 +330,21 @@ namespace Paramatrix.Tests.Scenario
         [Test]
         public void RestoreRejectsUnknownEvent()
         {
-            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Append(new EventRecord(EntityId.Parse("event.removed"), true, 0))), out _);
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Append(new EventRecord(EntityId.Parse("event.removed"), true, 0)), s.Monologues), out _);
             Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotUnknownEntity }));
         }
 
         [Test]
         public void RestoreRejectsMissingEvent()
         {
-            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Where(e => e.Event.Value != "event.radio")), out _);
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Where(e => e.Event.Value != "event.radio"), s.Monologues), out _);
             Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotMissingEntry }));
         }
 
         [Test]
         public void RestoreRejectsDuplicateEvent()
         {
-            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Append(s.Events[0])), out _);
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Append(s.Events[0]), s.Monologues), out _);
             Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotDuplicateEntry }));
         }
 
@@ -340,15 +353,38 @@ namespace Paramatrix.Tests.Scenario
         {
             var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events.Select(e =>
                 e.Event.Value == "event.radio" ? new EventRecord(e.Event, false, 1) :
-                e.Event.Value == "event.once" ? new EventRecord(e.Event, true, 7) : e)), out _);
+                e.Event.Value == "event.once" ? new EventRecord(e.Event, true, 7) : e), s.Monologues), out _);
             Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotInvalidValue, DiagnosticCode.SnapshotInvalidValue }));
         }
 
         [Test]
         public void RestoreRejectsNegativeVisit()
         {
-            var result = RestoreModified(s => new ScenarioSnapshot(-1, s.Events.Select(e => new EventRecord(e.Event, false, -1))), out _);
+            var result = RestoreModified(s => new ScenarioSnapshot(-1, s.Events.Select(e => new EventRecord(e.Event, false, -1)), s.Monologues), out _);
             Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotInvalidValue }));
+        }
+
+        [Test]
+        public void RestoreRejectsMonologueOutOfRange()
+        {
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events,
+                new[] { new MonologueRecord(EntityId.Parse("response.window_thoughts"), 4) }), out _);
+            Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotInvalidValue }));
+        }
+
+        [Test]
+        public void RestoreRejectsMissingMonologue()
+        {
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events, new MonologueRecord[0]), out _);
+            Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotMissingEntry }));
+        }
+
+        [Test]
+        public void RestoreRejectsUnknownMonologue()
+        {
+            var result = RestoreModified(s => new ScenarioSnapshot(s.CurrentVisit, s.Events,
+                s.Monologues.Append(new MonologueRecord(EntityId.Parse("response.removed"), 0))), out _);
+            Assert.That(Codes(result), Is.EqualTo(new[] { DiagnosticCode.SnapshotUnknownEntity }));
         }
 
         [Test]
@@ -386,16 +422,15 @@ namespace Paramatrix.Tests.Scenario
         }
 
         [Test]
-        public void AbortResponse()
+        public void ResponseLeavesNothingToAbort()
         {
             var h = Create();
             h.Click(InteractionType.Primary, "object.window");
-            Assert.That(h.HoldsControl, Is.True);
+            Assert.That(h.HoldsControl, Is.False, "a response is a monologue (Р10)");
 
             h.Runtime.AbortActiveChain("recovery");
 
-            Assert.That(h.HoldsControl, Is.False);
-            Assert.That(h.Errors, Is.EqualTo(new[] { DiagnosticCode.ChainAborted }));
+            h.AssertNoDiagnostics();
         }
 
         [Test]

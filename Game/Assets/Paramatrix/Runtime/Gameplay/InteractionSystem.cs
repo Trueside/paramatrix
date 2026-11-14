@@ -14,31 +14,28 @@ namespace Paramatrix.Gameplay
     }
 
     /// <summary>
-    /// Single routing point of player interactions (Architecture 0.3 §5). Turns clicks into interaction types (T12),
-    /// walks the hero to the target first (T13) and hands the trigger to Scenario. No story logic here.
+    /// Single routing point of player interactions (Architecture 0.3 §5). Turns clicks into interaction types (T12) and
+    /// hands the trigger to Scenario. The player walks the hero himself (Р11): a left click counts only on a target within
+    /// the hero's reach and does nothing otherwise; a right click (inspect, a thought) works from any distance.
+    /// No story logic here.
     /// </summary>
     public sealed class InteractionSystem
     {
         private readonly ContentRegistry _registry;
         private readonly GameFlow _flow;
         private readonly InventorySystem _inventory;
-        private readonly IHeroNavigation _navigation;
-        private readonly IDiagnosticsSink _diagnostics;
+        private readonly DialogueSystem _dialogue;
+        private readonly IHeroReach _reach;
         private ScenarioRuntime _scenario;
-        private int _approachId;
-        private bool _approaching;
 
-        public InteractionSystem(ContentRegistry registry, GameFlow flow, InventorySystem inventory, IHeroNavigation navigation, IDiagnosticsSink diagnostics)
+        public InteractionSystem(ContentRegistry registry, GameFlow flow, InventorySystem inventory, DialogueSystem dialogue, IHeroReach reach)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             _flow = flow ?? throw new ArgumentNullException(nameof(flow));
             _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
-            _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-            _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
-            _flow.Recovering += CancelApproach;
+            _dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
+            _reach = reach ?? throw new ArgumentNullException(nameof(reach));
         }
-
-        public bool IsApproaching => _approaching;
 
         internal void Attach(ScenarioRuntime scenario) => _scenario = scenario ?? throw new ArgumentNullException(nameof(scenario));
 
@@ -52,18 +49,31 @@ namespace Paramatrix.Gameplay
                 return; // input belongs to someone else right now; not an error
             }
 
+            Trigger trigger;
             if (button == PointerButton.Secondary)
             {
-                CancelApproach();
-                Submit(Trigger.PlayerInteraction(InteractionType.Inspect, target)); // inspect needs no approach
-                return;
+                trigger = Trigger.PlayerInteraction(InteractionType.Inspect, target); // from any distance
+            }
+            else
+            {
+                if (!_reach.CanReach(target))
+                {
+                    return; // out of the hero's reach: nothing happens, the player walks closer himself (Р11)
+                }
+
+                var selected = _inventory.Selected;
+                trigger = selected.HasValue
+                    ? Trigger.PlayerInteraction(InteractionType.ApplyItem, target, selected.Value)
+                    : Trigger.PlayerInteraction(PrimaryOf(target), target);
             }
 
-            var selected = _inventory.Selected;
-            var trigger = selected.HasValue
-                ? Trigger.PlayerInteraction(InteractionType.ApplyItem, target, selected.Value)
-                : Trigger.PlayerInteraction(PrimaryOf(target), target);
-            Approach(target, trigger);
+            // A scene stops the hero and turns him to the target. A monologue does not: he keeps doing what he did (Р10).
+            if (_scenario.WouldStartEvent(trigger))
+            {
+                _reach.FaceForInteraction(target);
+            }
+
+            Submit(trigger);
         }
 
         /// <summary>Click on an item icon in the inventory UI.</summary>
@@ -104,23 +114,22 @@ namespace Paramatrix.Gameplay
             }
         }
 
-        /// <summary>Click on empty space. Right click cancels the item selection (0.3 §5.3).</summary>
+        /// <summary>
+        /// Click on empty space. Right click cancels the item selection (0.3 §5.3) and moves the hero's thought on (Р10):
+        /// a shown thought goes to its next prepared line, and closes when it has none.
+        /// </summary>
         public void ClickEmpty(PointerButton button)
         {
-            if (CanInteract && button == PointerButton.Secondary)
+            if (!CanInteract || button != PointerButton.Secondary)
             {
-                _inventory.ClearSelection();
+                return;
             }
-        }
 
-        /// <summary>The player took over movement: the pending interaction is dropped (T13).</summary>
-        public void CancelApproach()
-        {
-            if (_approaching)
+            _inventory.ClearSelection();
+            var hero = _registry.Game.PlayerCharacter;
+            if (_dialogue.IsSaying(hero) && !_scenario.ContinueThought())
             {
-                _approaching = false;
-                _approachId++;
-                _navigation.Cancel();
+                _dialogue.Hush(hero);
             }
         }
 
@@ -137,36 +146,6 @@ namespace Paramatrix.Gameplay
                 default:
                     throw new ArgumentException($"{target} is not something the player can click.", nameof(target));
             }
-        }
-
-        private void Approach(EntityId target, Trigger trigger)
-        {
-            CancelApproach();
-            var id = ++_approachId;
-            _approaching = true;
-            _navigation.Approach(target, (outcome, error) =>
-            {
-                if (id != _approachId)
-                {
-                    return; // superseded by a newer click or cancelled
-                }
-
-                _approaching = false;
-                switch (outcome)
-                {
-                    case ApproachOutcome.Arrived:
-                        if (CanInteract)
-                        {
-                            Submit(trigger);
-                        }
-
-                        break;
-                    case ApproachOutcome.Failed:
-                        _diagnostics.Report(new Diagnostic(DiagnosticCode.ApproachFailed, Severity.Error,
-                            $"Hero could not approach {target}: {error}", SourceLocation.None));
-                        break;
-                }
-            });
         }
 
         private void Submit(in Trigger trigger) => _scenario.Submit(trigger);

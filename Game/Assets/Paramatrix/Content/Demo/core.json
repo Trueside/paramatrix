@@ -3,12 +3,13 @@
   "definitions": [
     { "id": "game.settings", "player_character": "character.paranoik" },
 
-    { "id": "character.paranoik", "name": "Параноик", "initial_location": "location.office", "primary_interaction": "talk" },
+    { "id": "character.paranoik", "name": "Параноик", "initial_location": "location.office", "primary_interaction": "talk", "emotions": ["default"] },
 
     { "id": "response.fallback_inspect", "tier": "fallback", "interaction": "inspect", "text": "Ничего особенного." },
     { "id": "response.fallback_primary", "tier": "fallback", "interaction": "primary", "text": "Ничего не происходит." },
     { "id": "response.fallback_take", "tier": "fallback", "interaction": "take", "text": "Не могу это взять." },
     { "id": "response.fallback_talk", "tier": "fallback", "interaction": "talk", "none": true },
+    { "id": "response.stub_talk", "tier": "generic", "interaction": "talk", "text": "Мне нечего тебе сказать." },
     { "id": "response.fallback_use", "tier": "fallback", "interaction": "use", "text": "Не знаю, как этим пользоваться." },
     { "id": "response.fallback_apply_item", "tier": "fallback", "interaction": "apply_item", "text": "Не подходит." },
     { "id": "response.fallback_combine_items", "tier": "fallback", "interaction": "combine_items", "text": "Не сочетается." },

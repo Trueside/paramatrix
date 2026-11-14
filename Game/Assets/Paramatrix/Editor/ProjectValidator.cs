@@ -5,6 +5,7 @@ using Paramatrix.Content;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using EntityId = Paramatrix.Content.EntityId;
 
@@ -102,6 +103,9 @@ namespace Paramatrix.Unity.Editor
                 return report; // scene checks need valid content
             }
 
+            CheckAvatars(loaded.Registry, manifest, report);
+            CheckNovelPictures(loaded.Registry, manifest, report);
+
             var opened = new List<Scene>();
             try
             {
@@ -129,6 +133,7 @@ namespace Paramatrix.Unity.Editor
                 }
 
                 ValidateScenes(loaded.Registry, bootstrap, scenes, report);
+                ValidatePixelGrid(bootstrap, scenes.Values, report);
             }
             finally
             {
@@ -208,7 +213,268 @@ namespace Paramatrix.Unity.Editor
             CheckReachability(content, viewsByEntity, report);
         }
 
+        /// <summary>
+        /// The pixel grid (Visual Production Standard 0.3, В-06, В-20, В-22): the Bootstrap camera renders the world on
+        /// the 960×540 grid and scales it as the standard says; every sprite in every scene is a pixel-grid sprite;
+        /// no scene has dynamic 2D lights.
+        /// </summary>
+        public static void ValidatePixelGrid(Scene? bootstrap, IEnumerable<Scene> scenes, ValidationReport report)
+        {
+            if (bootstrap.HasValue)
+            {
+                ValidateCamera(bootstrap.Value, report);
+            }
+
+            foreach (var scene in scenes.OrderBy(s => s.path))
+            {
+                foreach (var light in FindInScene<Light2D>(scene))
+                {
+                    report.Error($"Scene '{scene.name}' has a 2D light '{light.name}': the game has no dynamic lighting, light is drawn into the art (В-20).", light);
+                }
+
+                foreach (var renderer in FindInScene<SpriteRenderer>(scene).Where(r => r.sprite != null))
+                {
+                    var path = AssetDatabase.GetAssetPath(renderer.sprite);
+                    var problem = PixelArtImport.Problem(AssetImporter.GetAtPath(path) as TextureImporter);
+                    if (problem != null)
+                    {
+                        report.Error($"Sprite of '{renderer.name}' in scene '{scene.name}' is not on the pixel grid: {problem}.", renderer);
+                    }
+
+                    PlacementProblems(renderer, path, scene, report);
+                }
+            }
+
+            // Characters stand on the floor line (world y = 0): the bottom of the sprite, where the feet are.
+            var all = bootstrap.HasValue ? scenes.Append(bootstrap.Value) : scenes;
+            foreach (var scene in all.Distinct().OrderBy(s => s.path))
+            {
+                foreach (var character in FindInScene<CharacterView>(scene))
+                {
+                    foreach (var renderer in character.GetComponentsInChildren<SpriteRenderer>(true).Where(r => r.sprite != null))
+                    {
+                        var feet = renderer.bounds.min.y * PixelGrid.PixelsPerUnit;
+                        if (Mathf.Abs(feet) > 0.01f)
+                        {
+                            report.Error($"Character '{character.name}' in scene '{scene.name}' does not stand on the floor line: its feet are {feet:0.#} grid pixels off.", renderer);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>The placeholder rectangle: the only sprite that may be scaled (blocks, invisible click areas).</summary>
+        public const string PlaceholderPath = PixelArtImport.ArtFolder + "Placeholder.png";
+
+        /// <summary>
+        /// A sprite placed by hand must lie on the grid (В-06): at whole grid pixels, not scaled (art is drawn at its
+        /// size; only the placeholder rectangle is stretched), not rotated.
+        /// </summary>
+        public static void PlacementProblems(SpriteRenderer renderer, string spritePath, Scene scene, ValidationReport report)
+        {
+            var transform = renderer.transform;
+            var position = transform.position;
+            if (!PixelGridTools.OnGrid(position.x) || !PixelGridTools.OnGrid(position.y))
+            {
+                report.Error($"'{renderer.name}' in scene '{scene.name}' is not on whole grid pixels: X {position.x * PixelGrid.PixelsPerUnit:0.##}, Y {position.y * PixelGrid.PixelsPerUnit:0.##} px (Paramatrix > Snap Selection To Pixel Grid).", renderer);
+            }
+
+            if (transform.rotation != Quaternion.identity)
+            {
+                report.Error($"'{renderer.name}' in scene '{scene.name}' is rotated: pixel art is never rotated.", renderer);
+            }
+
+            if (spritePath != PlaceholderPath && (transform.lossyScale - Vector3.one).sqrMagnitude > 0.000001f)
+            {
+                report.Error($"'{renderer.name}' in scene '{scene.name}' is scaled {transform.lossyScale}: art is drawn at its size, make the sprite the right size instead.", renderer);
+            }
+        }
+
+        private static void ValidateCamera(Scene scene, ValidationReport report)
+        {
+            var cameras = FindInScene<PixelPerfectCamera>(scene);
+            if (cameras.Count != 1)
+            {
+                report.Error($"Scene '{scene.name}' must have exactly one PixelPerfectCamera on the world camera, found {cameras.Count}.");
+                return;
+            }
+
+            var camera = cameras[0];
+            var filter = (PixelPerfectCamera.PixelPerfectFilterMode)new SerializedObject(camera).FindProperty("m_FilterMode").intValue;
+            void Expect<T>(string what, T actual, T expected)
+            {
+                if (!EqualityComparer<T>.Default.Equals(actual, expected))
+                {
+                    report.Error($"PixelPerfectCamera '{camera.name}': {what} is {actual}, the pixel grid needs {expected}.", camera);
+                }
+            }
+
+            Expect("assets pixels per unit", camera.assetsPPU, PixelGrid.PixelsPerUnit);
+            Expect("reference resolution", new Vector2Int(camera.refResolutionX, camera.refResolutionY), new Vector2Int(PixelGrid.Width, PixelGrid.Height));
+            Expect("grid snapping", camera.gridSnapping, PixelPerfectCamera.GridSnapping.UpscaleRenderTexture);
+            Expect("crop frame", camera.cropFrame, PixelPerfectCamera.CropFrame.StretchFill);
+            Expect("filter mode", filter, PixelPerfectCamera.PixelPerfectFilterMode.RetroAA);
+            if (!camera.CompareTag("MainCamera"))
+            {
+                report.Error($"PixelPerfectCamera '{camera.name}' is not on the MainCamera.", camera);
+            }
+        }
+
         // ---------------- checks ----------------
+
+        /// <summary>
+        /// Avatars (Р10): the manifest lists exactly the pictures in the avatar folder; each belongs to a declared emotion
+        /// of an existing character and is exactly <see cref="DialogueView.AvatarWidth"/>×<see cref="DialogueView.AvatarHeight"/> (all avatars one size); every declared emotion has a picture.
+        /// </summary>
+        public static void CheckAvatars(ContentRegistry content, ContentManifest manifest, ValidationReport report)
+        {
+            string Key(ContentManifest.Avatar a) => a.characterId + "/" + a.emotion + "/" + AssetDatabase.GetAssetPath(a.sprite);
+            var onDisk = DemoSceneBuilder.FindAvatars();
+            if (!onDisk.Select(Key).SequenceEqual(manifest.Avatars.Select(Key)))
+            {
+                report.Error($"Avatars in the content manifest differ from {DemoSceneBuilder.AvatarsFolder}: run Paramatrix > Collect Content.", manifest);
+                return;
+            }
+
+            foreach (var avatar in manifest.Avatars)
+            {
+                if (avatar.sprite == null)
+                {
+                    report.Error($"Avatar '{avatar.emotion}' of {avatar.characterId} is not a sprite.", manifest);
+                    continue;
+                }
+
+                var path = AssetDatabase.GetAssetPath(avatar.sprite);
+                if (avatar.characterId.Length == 0)
+                {
+                    report.Error($"Avatar '{path}' is not in {DemoSceneBuilder.AvatarsFolder}/<name>/emotions/.", avatar.sprite);
+                    continue;
+                }
+
+                if (!EntityId.TryParse(avatar.characterId, out var id, out _) || !content.TryGet<CharacterDefinition>(id, out var character))
+                {
+                    report.Error($"Avatar '{path}': there is no {avatar.characterId} in content (the folder name is the character ID without 'character.').", avatar.sprite);
+                    continue;
+                }
+
+                if (!character.HasEmotion(avatar.emotion))
+                {
+                    report.Error($"Avatar '{path}': {id} does not declare emotion '{avatar.emotion}' (declared: {string.Join(", ", character.Emotions)}).", avatar.sprite);
+                }
+
+                var size = avatar.sprite.rect.size;
+                if ((int)size.x != DialogueView.AvatarWidth || (int)size.y != DialogueView.AvatarHeight)
+                {
+                    report.Error($"Avatar '{path}' is {size.x}x{size.y}: every avatar is exactly {DialogueView.AvatarWidth}x{DialogueView.AvatarHeight} (tools/art/prepare-avatars.ps1).", avatar.sprite);
+                }
+
+                var importProblem = PixelArtImport.AvatarProblem(AssetImporter.GetAtPath(path) as TextureImporter);
+                if (importProblem != null)
+                {
+                    report.Error($"Avatar '{path}' is not imported as an avatar: {importProblem} (reimport it).", avatar.sprite);
+                }
+            }
+
+            foreach (var definition in content.GetByKind(EntityKind.Character))
+            {
+                var character = (CharacterDefinition)definition;
+                foreach (var emotion in character.Emotions)
+                {
+                    if (manifest.FindAvatar(character.Id.Value, emotion) == null)
+                    {
+                        report.Error($"{character.Id} declares emotion '{emotion}', but {DemoSceneBuilder.AvatarsFolder}/{character.Id.Name}/emotions/{emotion}.png is missing.",
+                            Asset(character.Source));
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Novel pictures (Р12): the manifest lists exactly the pictures in the novel folders; each belongs to a declared
+        /// emotion of an existing character and is exactly <see cref="DialogueView.NovelPictureWidth"/>×<see cref="DialogueView.NovelPictureHeight"/>;
+        /// the partner of every novel has a picture for default and for every emotion of its lines.
+        /// </summary>
+        public static void CheckNovelPictures(ContentRegistry content, ContentManifest manifest, ValidationReport report)
+        {
+            string Key(ContentManifest.Avatar a) => a.characterId + "/" + a.emotion + "/" + AssetDatabase.GetAssetPath(a.sprite);
+            if (!DemoSceneBuilder.FindNovelPictures().Select(Key).SequenceEqual(manifest.NovelPictures.Select(Key)))
+            {
+                report.Error($"Novel pictures in the content manifest differ from {DemoSceneBuilder.AvatarsFolder}/<name>/novel: run Paramatrix > Collect Content.", manifest);
+                return;
+            }
+
+            foreach (var picture in manifest.NovelPictures)
+            {
+                if (picture.sprite == null)
+                {
+                    report.Error($"Novel picture '{picture.emotion}' of {picture.characterId} is not a sprite.", manifest);
+                    continue;
+                }
+
+                var path = AssetDatabase.GetAssetPath(picture.sprite);
+                if (!EntityId.TryParse(picture.characterId, out var id, out _) || !content.TryGet<CharacterDefinition>(id, out var character))
+                {
+                    report.Error($"Novel picture '{path}': there is no {picture.characterId} in content (the folder name is the character ID without 'character.').", picture.sprite);
+                    continue;
+                }
+
+                if (!character.HasEmotion(picture.emotion))
+                {
+                    report.Error($"Novel picture '{path}': {id} does not declare emotion '{picture.emotion}' (declared: {string.Join(", ", character.Emotions)}).", picture.sprite);
+                }
+
+                var size = picture.sprite.rect.size;
+                if ((int)size.x != DialogueView.NovelPictureWidth || (int)size.y != DialogueView.NovelPictureHeight)
+                {
+                    report.Error($"Novel picture '{path}' is {size.x}x{size.y}: every novel picture is exactly {DialogueView.NovelPictureWidth}x{DialogueView.NovelPictureHeight} (tools/art/prepare-avatars.ps1 -Kind novel).", picture.sprite);
+                }
+
+                var importProblem = PixelArtImport.AvatarProblem(AssetImporter.GetAtPath(path) as TextureImporter);
+                if (importProblem != null)
+                {
+                    report.Error($"Novel picture '{path}' is not imported in screen pixels: {importProblem} (reimport it).", picture.sprite);
+                }
+            }
+
+            foreach (var definition in content.GetByKind(EntityKind.Dialogue))
+            {
+                var dialogue = (DialogueDefinition)definition;
+                if (dialogue.Mode != DialogueMode.Novel)
+                {
+                    continue;
+                }
+
+                var partner = dialogue.Partner.Value;
+                var emotions = new SortedSet<string>(System.StringComparer.Ordinal) { Emotions.Default };
+                CollectEmotions(dialogue.Steps, partner, emotions);
+                foreach (var emotion in emotions)
+                {
+                    if (manifest.FindNovelPicture(partner.Value, emotion) == null)
+                    {
+                        report.Error($"{dialogue.Id} shows {partner} as '{emotion}', but {DemoSceneBuilder.AvatarsFolder}/{partner.Name}/novel/{emotion}.png is missing.",
+                            Asset(dialogue.Source));
+                    }
+                }
+            }
+        }
+
+        private static void CollectEmotions(IReadOnlyList<DialogueStep> steps, EntityId speaker, SortedSet<string> emotions)
+        {
+            foreach (var step in steps)
+            {
+                if (step is DialogueLine line && line.Speaker == speaker)
+                {
+                    emotions.Add(line.Emotion);
+                }
+                else if (step is DialogueChoice choice)
+                {
+                    foreach (var option in choice.Options)
+                    {
+                        CollectEmotions(option.Steps, speaker, emotions);
+                    }
+                }
+            }
+        }
 
         private static void CheckManifest(ContentManifest manifest, ValidationReport report)
         {
@@ -446,7 +712,7 @@ namespace Paramatrix.Unity.Editor
         private static Object Asset(SourceLocation source) =>
             source.Source == null ? null : AssetDatabase.LoadAssetAtPath<TextAsset>(source.Source);
 
-        private static void Print(ValidationReport report)
+        public static void Print(ValidationReport report)
         {
             foreach (var problem in report.Problems)
             {

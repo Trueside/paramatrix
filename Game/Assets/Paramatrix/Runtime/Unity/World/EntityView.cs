@@ -17,7 +17,7 @@ namespace Paramatrix.Unity
         private string entityId;
 
         [SerializeField]
-        [Tooltip("Where a character stands to interact. Empty: the view's own position.")]
+        [Tooltip("Where a scene walks a character to this entity (move actions). Empty: the view's own position.")]
         private Transform approachPoint;
 
         private SpriteRenderer[] _sprites;
@@ -30,6 +30,70 @@ namespace Paramatrix.Unity
 
         /// <summary>X of the approach point on the floor line.</summary>
         public float ApproachX => approachPoint != null ? approachPoint.position.x : transform.position.x;
+
+        /// <summary>
+        /// Horizontal distance from world <paramref name="x"/> to what is drawn (all sprites): 0 over it, otherwise to its
+        /// nearer edge. The hero's reach is measured with it (Р11).
+        /// </summary>
+        public float HorizontalDistanceTo(float x)
+        {
+            var min = float.PositiveInfinity;
+            var max = float.NegativeInfinity;
+            foreach (var sprite in Sprites)
+            {
+                min = Mathf.Min(min, sprite.bounds.min.x);
+                max = Mathf.Max(max, sprite.bounds.max.x);
+            }
+
+            if (min > max)
+            {
+                throw new System.InvalidOperationException($"{name} has no sprites, so nothing is drawn to reach.");
+            }
+
+            return x < min ? min - x : x > max ? x - max : 0f;
+        }
+
+        /// <summary>Horizontal middle of what is drawn (all sprites): where others look when they face this entity.</summary>
+        public float CenterX
+        {
+            get
+            {
+                var min = float.PositiveInfinity;
+                var max = float.NegativeInfinity;
+                foreach (var sprite in Sprites)
+                {
+                    min = Mathf.Min(min, sprite.bounds.min.x);
+                    max = Mathf.Max(max, sprite.bounds.max.x);
+                }
+
+                if (min > max)
+                {
+                    throw new System.InvalidOperationException($"{name} has no sprites, so it has no drawn middle.");
+                }
+
+                return (min + max) / 2f;
+            }
+        }
+
+        /// <summary>Top edge of what is drawn (all sprites), world Y: monologue bubbles stand above it.</summary>
+        public float TopY
+        {
+            get
+            {
+                var max = float.NegativeInfinity;
+                foreach (var sprite in Sprites)
+                {
+                    max = Mathf.Max(max, sprite.bounds.max.y);
+                }
+
+                if (float.IsNegativeInfinity(max))
+                {
+                    throw new System.InvalidOperationException($"{name} has no sprites, so it has no top.");
+                }
+
+                return max;
+            }
+        }
 
         /// <summary>The kind of entity this view type represents.</summary>
         public abstract EntityKind Kind { get; }

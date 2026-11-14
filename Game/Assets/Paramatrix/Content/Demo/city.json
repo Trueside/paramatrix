@@ -1,0 +1,94 @@
+{
+  "format_version": 1,
+  "definitions": [
+    { "id": "location.nii_street", "scene": "Location_NiiStreet" },
+    { "id": "location.dk_street", "scene": "Location_DkStreet" },
+    { "id": "location.bar", "scene": "Location_Bar" },
+    { "id": "character.beautiful_girl", "name": "Красавица", "initial_location": "location.bar", "primary_interaction": "talk", "emotions": ["default", "embarrassed", "smirk"] },
+    {
+      "id": "dialogue.bar_girl",
+      "mode": "normal",
+      "lines": [
+        { "speaker": "character.beautiful_girl", "text": "Не часто сюда заходят такие, как ты." },
+        { "speaker": "character.paranoik", "text": "Такие — это какие?" },
+        { "speaker": "character.beautiful_girl", "text": "Те, кто оглядывается на каждую тень." },
+        { "choice": [
+          { "label": "Отшутиться", "lines": [ { "speaker": "character.paranoik", "text": "Тени тоже иногда оглядываются." }, { "speaker": "character.beautiful_girl", "text": "Смешно. Мне нравится." } ] },
+          { "label": "Признаться", "lines": [ { "speaker": "character.paranoik", "text": "За мной правда следят." }, { "speaker": "character.beautiful_girl", "text": "Здесь никто никого не ищет. Расслабься." } ] }
+        ] },
+        { "speaker": "character.beautiful_girl", "text": "Я давно за тобой наблюдаю." },
+        { "speaker": "character.beautiful_girl", "text": "Хочешь узнать друг друга лучше?" },
+        { "choice": [
+          { "label": "Да", "lines": [ { "speaker": "character.paranoik", "text": "Да. Я давно хотел этого." } ], "next": "dialogue.bar_girl_novel" },
+          { "label": "Мне пора", "lines": [ { "speaker": "character.paranoik", "text": "В другой раз." }, { "speaker": "character.beautiful_girl", "text": "Как знаешь." } ], "end": true }
+        ] }
+      ]
+    },
+    {
+      "id": "dialogue.bar_girl_novel",
+      "mode": "novel",
+      "partner": "character.beautiful_girl",
+      "lines": [
+        { "speaker": "character.beautiful_girl", "text": "Вот так. Теперь здесь только мы." },
+        { "speaker": "character.paranoik", "text": "Бар куда-то исчез." },
+        { "speaker": "character.beautiful_girl", "text": "Не исчез. Ты просто перестал его замечать.", "emotion": "smirk" },
+        { "choice": [
+          { "label": "Сделать комплимент", "lines": [ { "speaker": "character.paranoik", "text": "У тебя удивительные глаза." }, { "speaker": "character.beautiful_girl", "text": "Ты первый, кто посмотрел в них дольше секунды.", "emotion": "embarrassed" } ] },
+          { "label": "Спросить, кто она", "lines": [ { "speaker": "character.paranoik", "text": "Кто ты?" }, { "speaker": "character.beautiful_girl", "text": "Та, кого ты не ожидал встретить.", "emotion": "smirk" } ] }
+        ] },
+        { "speaker": "character.beautiful_girl", "text": "Мне пора. Но мы ещё увидимся." },
+        { "choice": [
+          { "label": "Подожди", "lines": [ { "speaker": "character.paranoik", "text": "Подожди…" }, { "speaker": "character.beautiful_girl", "text": "Не торопи сон." } ] },
+          { "label": "До встречи", "lines": [ { "speaker": "character.paranoik", "text": "До встречи." } ] }
+        ] }
+      ]
+    },
+    { "id": "event.talk_beautiful_girl", "execution": "exclusive", "repeat": "repeatable", "triggers": [ { "type": "interaction", "interaction": "talk", "target": "character.beautiful_girl" } ], "actions": [ { "action": "dialogue", "dialogue": "dialogue.bar_girl" } ] },
+    { "id": "response.inspect_beautiful_girl", "tier": "specific", "interaction": "inspect", "target": "character.beautiful_girl", "text": "Чёрный костюм, золотые серьги. Смотрит так, будто давно меня ждёт." },
+    { "id": "location.factory_street", "scene": "Location_FactoryStreet" },
+    { "id": "location.shop_street", "scene": "Location_ShopStreet" },
+    { "id": "location.workshop", "scene": "Location_Workshop" },
+    { "id": "object.nii_entrance", "primary_interaction": "exit" },
+    { "id": "object.hall_east_edge", "primary_interaction": "exit" },
+    { "id": "object.nii_west_edge", "primary_interaction": "exit" },
+    { "id": "object.nii_east_edge", "primary_interaction": "exit" },
+    { "id": "object.dk_west_edge", "primary_interaction": "exit" },
+    { "id": "object.dk_east_edge", "primary_interaction": "exit" },
+    { "id": "object.dk_entrance", "primary_interaction": "exit" },
+    { "id": "object.bar_curtain", "primary_interaction": "exit" },
+    { "id": "object.factory_west_edge", "primary_interaction": "exit" },
+    { "id": "object.factory_gates", "primary_interaction": "exit" },
+    { "id": "object.shop_gates", "primary_interaction": "exit" },
+    { "id": "object.shop_door", "primary_interaction": "exit" },
+    { "id": "object.workshop_door", "primary_interaction": "exit" },
+    { "id": "object.workshop_upper_door", "primary_interaction": "exit" },
+    { "id": "event.exit_nii_entrance", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.nii_entrance"}], "actions": [{"action": "transition", "location": "location.office", "entry": "from_street"}] },
+    { "id": "response.inspect_nii_entrance", "tier": "specific", "interaction": "inspect", "target": "object.nii_entrance", "text": "Стеклянные двери НИИ кибернетики. Внутри горит дежурный свет." },
+    { "id": "event.exit_hall_east_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.hall_east_edge"}], "actions": [{"action": "transition", "location": "location.nii_street", "entry": "from_west"}] },
+    { "id": "response.inspect_hall_east_edge", "tier": "specific", "interaction": "inspect", "target": "object.hall_east_edge", "text": "Улица тянется дальше, к НИИ." },
+    { "id": "event.exit_nii_west_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.nii_west_edge"}], "actions": [{"action": "transition", "location": "location.hall", "entry": "from_east"}] },
+    { "id": "response.inspect_nii_west_edge", "tier": "specific", "interaction": "inspect", "target": "object.nii_west_edge", "text": "Там жилые дома." },
+    { "id": "event.exit_nii_east_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.nii_east_edge"}], "actions": [{"action": "transition", "location": "location.dk_street", "entry": "from_west"}] },
+    { "id": "response.inspect_nii_east_edge", "tier": "specific", "interaction": "inspect", "target": "object.nii_east_edge", "text": "Дальше по улице — Дом культуры." },
+    { "id": "event.exit_dk_west_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.dk_west_edge"}], "actions": [{"action": "transition", "location": "location.nii_street", "entry": "from_east"}] },
+    { "id": "response.inspect_dk_west_edge", "tier": "specific", "interaction": "inspect", "target": "object.dk_west_edge", "text": "Обратно к НИИ." },
+    { "id": "event.exit_dk_east_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.dk_east_edge"}], "actions": [{"action": "transition", "location": "location.factory_street", "entry": "from_west"}] },
+    { "id": "response.inspect_dk_east_edge", "tier": "specific", "interaction": "inspect", "target": "object.dk_east_edge", "text": "За поворотом дымят трубы завода." },
+    { "id": "event.exit_dk_entrance", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.dk_entrance"}], "actions": [{"action": "transition", "location": "location.bar", "entry": "from_street"}] },
+    { "id": "response.inspect_dk_entrance", "tier": "specific", "interaction": "inspect", "target": "object.dk_entrance", "text": "Двери Дома культуры. Изнутри доносится музыка." },
+    { "id": "event.exit_bar_curtain", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.bar_curtain"}], "actions": [{"action": "transition", "location": "location.dk_street", "entry": "from_bar"}] },
+    { "id": "response.inspect_bar_curtain", "tier": "specific", "interaction": "inspect", "target": "object.bar_curtain", "text": "Занавеска из бусин. За ней — выход на улицу." },
+    { "id": "event.exit_factory_west_edge", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.factory_west_edge"}], "actions": [{"action": "transition", "location": "location.dk_street", "entry": "from_east"}] },
+    { "id": "response.inspect_factory_west_edge", "tier": "specific", "interaction": "inspect", "target": "object.factory_west_edge", "text": "Обратно к Дому культуры." },
+    { "id": "event.exit_factory_gates", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.factory_gates"}], "actions": [{"action": "transition", "location": "location.shop_street", "entry": "from_factory"}] },
+    { "id": "response.inspect_factory_gates", "tier": "specific", "interaction": "inspect", "target": "object.factory_gates", "text": "Ворота завода №7. Приоткрыты." },
+    { "id": "event.exit_shop_gates", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.shop_gates"}], "actions": [{"action": "transition", "location": "location.factory_street", "entry": "from_shop"}] },
+    { "id": "response.inspect_shop_gates", "tier": "specific", "interaction": "inspect", "target": "object.shop_gates", "text": "Ворота обратно, на улицу." },
+    { "id": "event.exit_shop_door", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.shop_door"}], "actions": [{"action": "transition", "location": "location.workshop", "entry": "from_street"}] },
+    { "id": "response.inspect_shop_door", "tier": "specific", "interaction": "inspect", "target": "object.shop_door", "text": "Дверь в цех. Над ней горит лампа." },
+    { "id": "event.exit_workshop_door", "execution": "exclusive", "repeat": "repeatable", "triggers": [{"type": "interaction", "interaction": "exit", "target": "object.workshop_door"}], "actions": [{"action": "transition", "location": "location.shop_street", "entry": "from_workshop"}] },
+    { "id": "response.inspect_workshop_door", "tier": "specific", "interaction": "inspect", "target": "object.workshop_door", "text": "Двери во двор завода." },
+    { "id": "response.workshop_upper_door", "tier": "specific", "interaction": "exit", "target": "object.workshop_upper_door", "text": "Заперто изнутри. Наверх так не попасть." },
+    { "id": "response.inspect_workshop_upper_door", "tier": "specific", "interaction": "inspect", "target": "object.workshop_upper_door", "text": "Дверь на галерее. Табличка стёрта." }
+  ]
+}
